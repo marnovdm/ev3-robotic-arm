@@ -1,0 +1,32 @@
+[flake8]
+ignore=
+    # ignore line too long
+    E501,
+    # line break BEFORE(W504) operator is fine, AFTER isn't
+    W503,
+    # ignore docstring warnings for now..
+    D1,  # missing docstrings
+    D2,  # formatting
+    D3,  # formatting
+    D4,  # formatting
+    Q003,  # Change outer quotes to avoid escaping inner quotes
+    Q000,  # quotes
+    C901,  # complexity
+
+exclude=
+    # don't test tests
+    tests/,
+    # ignore documentation
+    docs/,
+    # ignore legacy
+    legacy/,
+    # ignore cache
+    __pycache__,
+    # ignore git repo dir
+    .git/,
+
+max-complexity=10
+statistics=True
+max-line-length=120
+
+# python3 -m autopep8 --select E201,E202,E261,E225,E226,E303,E302,E265,W291,W293,W391,W503,E124,W291,W293,W503,E131,E124 --in-place -r -a .

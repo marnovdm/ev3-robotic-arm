@@ -7,50 +7,56 @@ class SmartMotorBase:
     _motor = None
     _speed = None
     _name = None
-    _minPos = -5000  # @TODO revert to None or 5..?
-    _maxPos = 5000  # @TODO revert to None
+    _min_position = None
+    _max_position = None
     _motorPadding = 10
 
-    def __init__(self, motor, speed=10, name=None):
+    def __init__(self, motor, name, speed=30, padding=10, inverted=False, debug=False):
         self._motor = motor
-        self._speed = speed
         self._name = name
+        self._speed = speed
+        self._padding = padding
+        self._inverted = inverted
+        self._debug = debug
 
     def calibrate(self, to_center=True):
         print('Calibrating {}...'.format(self._name))
 
     @property
-    def maxPos(self):
-        return self._maxPos
+    def max_position(self):
+        return self._max_position
 
     @property
-    def minPos(self):
-        return self._minPos
+    def min_position(self):
+        return self._min_position
 
     @property
-    def centerPos(self):
-        return (self._maxPos - self._minPos) / 2
+    def center_position(self):
+        return (self._max_position - self._min_position) / 2
+
+    def to_center(self):
+        raise NotImplementedError
 
     def __getattr__(self, name):
         return getattr(self._motor, name)
 
 
 class StaticRangeMotor(SmartMotorBase):
-    def __init__(self, motor, maxPos, speed=10, name=None):
+    def __init__(self, motor, name, speed=30, padding=10, inverted=False, debug=False, max_position=None):
         # let's assume we're in center upon init and fake min and max to allow moving both ways on start
-        self._maxPos = maxPos / 2
-        self._minPos = (maxPos / 2) * -1
-        super().__init__(motor, speed, name)
+        self._max_position = max_position / 2
+        self._min_position = (max_position / 2) * -1
+        super().__init__(motor, name, speed, padding, inverted, debug)
 
     def calibrate(self, to_center=True):
         raise NotImplementedError
 
 
 class LimitedRangeMotor(SmartMotorBase):
-    """ handle motors with a limited range of valid movements """
+    """ handle motors with a limited range of valid movements, using stall detection to determine usable range """
 
     def calibrate(self, to_center=True):
-        super().calibrate()
+        super().calibrate(to_center)
         self._motor.on(self._speed, False)
 
         def checkMotorState(state):
@@ -63,28 +69,28 @@ class LimitedRangeMotor(SmartMotorBase):
         # self._motor.wait(checkMotorState, 10000)
         self._motor.wait_until('stalled')
         self._motor.reset()  # sets 0 point
-        self._minPos = self._motor.position + self._motorPadding
+        self._min_position = self._motor.position + self._motorPadding
 
         self._motor.on(-self._speed, False)
         self._motor.wait_until('stalled')
 
         # self._motor.wait(checkMotorState, 10000)
         self._motor.stop()
-        self._maxPos = self._motor.position - self._motorPadding
+        self._max_position = self._motor.position - self._motorPadding
 
         if to_center:
-            self._motor.on_to_position(self._speed, self.centerPos, True, True)
+            self._motor.on_to_position(self._speed, self.center_position, True, True)
         
-        print('Motor {} found max {}'.format(self._name, self._maxPos))
+        print('Motor {} found max {}'.format(self._name, self._max_position))
 
 
 class LimitedRangeMotorSet(LimitedRangeMotor):
-    """ handle a set of motors with limited range of valid movements """
+    """ handle a set of motors with limited range of valid movements, using stall detection to determine usable range """
 
     def calibrate(self, to_center=True):
         # super().calibrate()
         for motor in self._motor:
-            motor.on(-self._speed, False)
+            motor.on(self._speed, False)
 
         def checkMotorState(state):
             print(state)
@@ -98,25 +104,25 @@ class LimitedRangeMotorSet(LimitedRangeMotor):
         for motor in self._motor:
             motor.reset()  # sets 0 point
         
-        self._minPos = self._motor[1].position + self._motorPadding
+        self._min_position = self._motor[1].position + self._motorPadding
 
         for motor in self._motor:
-            motor.on(self._speed, False)
+            motor.on(-self._speed, False)
 
         # self._motor[1].wait(checkMotorState, 10000)
         self._motor[1].wait_until('stalled')
         for motor in self._motor:
             motor.stop()
 
-        self._maxPos = self._motor[1].position - self._motorPadding
+        self._max_position = self._motor[1].position - self._motorPadding
         
         if to_center:
             for motor in self._motor:
-                motor.on_to_position(self._speed, self.centerPos, True, False)
+                motor.on_to_position(self._speed, self.center_position, True, False)
 
         # cant wait here because of motor set, so let's at least give it some time
         time.sleep(1)
-        print('Motor {} found max {}'.format(self._name, self._maxPos))
+        print('Motor {} found max {}'.format(self._name, self._max_position))
 
     def on_to_position(self, speed, position, brake, wait):
         for motor in self._motor:
@@ -145,13 +151,13 @@ class ColorSensorMotor(SmartMotorBase):
     _sensor = None
     _color = None
 
-    def __init__(self, motor, speed=10, name=None, sensor=None, color=None):
+    def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, color=None):
         self._sensor = sensor
         self._color = color
         super().__init__(motor, speed, name)
 
-    def calibrate(self):
-        super().calibrate()
+    def calibrate(self, to_center=False):
+        super().calibrate(to_center)
         if self._sensor.color != self._color:
             self._motor.on(self._speed, False)
             while self._sensor.color != self._color:
@@ -162,23 +168,87 @@ class ColorSensorMotor(SmartMotorBase):
         self._motor.reset()
 
     @property
-    def centerPos(self):
+    def center_position(self):
         return 0
 
 
 class TouchSensorMotor(SmartMotorBase):
+    """ 
+    Moves the motor until the related touch sensor is pressed and set's that position to 0. 
+    The max_position argument is used to determine the max valid position.
+    """
     _sensor = None
 
-    def __init__(self, motor, speed=10, name=None, sensor=None, max=None):
-        self._sensor = sensor
-        self._maxPos = max
-        self._minPos = 0
-        super().__init__(motor, speed, name)
+    def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, max_position=None):
+        if not sensor:
+            raise ValueError('missing sensor argument')
 
-    def calibrate(self):
-        super().calibrate()
+        self._sensor = sensor
+        self._max_position = max_position
+        self._min_position = 0
+        super().__init__(motor, name, speed, padding, inverted, debug)
+
+    def calibrate(self, to_center=True):
+        super().calibrate(to_center)
         if not self._sensor.is_pressed:
             self._motor.on(self._speed, False)
             self._sensor.wait_for_pressed()
 
         self._motor.reset()
+        
+        if to_center:
+            self._motor.on_to_position(self._speed, self.center_position, True, True)
+
+class TouchSensorMotorSet(SmartMotorBase):
+    _sensor = None
+
+    def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, max_position=None):
+        if not sensor:
+            raise ValueError('missing sensor argument')
+        
+        self._sensor = sensor
+        self._max_position = max_position
+        self._min_position = 0
+        super().__init__(motor, name, speed, padding, inverted, debug)
+
+    def calibrate(self, to_center=True):
+        super().calibrate(to_center)
+        if not self._sensor.is_pressed:
+            for motor in self._motor:
+                if self._inverted:
+                    self._motor.on(-self._speed, False)
+                else:
+                    self._motor.on(self._speed, False)
+            
+            self._sensor.wait_for_pressed()
+        
+        for motor in self._motor:
+            self._motor.reset()
+        
+        if to_center:
+            for motor in self._motor:
+                motor.on_to_position(self._speed, self.center_position, True, False)
+        
+        # @TODO wait a bit
+        time.wait(1)
+
+    def on_to_position(self, speed, position, brake, wait):
+        for motor in self._motor:
+            # @TODO hardcoded no-waiting because of dual motor setup
+            motor.on_to_position(speed, position, brake, False)
+
+    def reset(self):
+        for motor in self._motor:
+            motor.reset()
+
+    def stop(self):
+        for motor in self._motor:
+            motor.stop()
+
+    def on(self, speed):
+        for motor in self._motor:
+            motor.on(speed)
+
+    @property
+    def is_running(self):
+        return self._motor[0].is_running

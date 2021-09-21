@@ -28,6 +28,7 @@ import time
 import evdev
 import rpyc
 from signal import signal, SIGINT
+
 from ev3dev2 import DeviceNotFound
 from ev3dev2.led import Leds
 from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3, INPUT_4
@@ -39,7 +40,7 @@ from ev3dev2.power import PowerSupply
 # from ev3dev2.sound import Sound
 from evdev import InputDevice
 
-from smart_motor import LimitedRangeMotor, LimitedRangeMotorSet, ColorSensorMotor, StaticRangeMotor, TouchSensorMotor
+from smart_motor import LimitedRangeMotor, ColorSensorMotor, StaticRangeMotor, TouchSensorMotor, TouchSensorMotorSet
 from math_helper import scale_stick
 
 
@@ -101,9 +102,26 @@ except DeviceNotFound:
     gamepad = False
     logger.info("Wireless controller not found - running without it")
 
+
+
+
+
 # LEDs
 leds = Leds()
 remote_leds = remote_led.Leds()
+
+def set_led_colors(color):
+    leds.set_color("LEFT", "BLACK")
+    leds.set_color("RIGHT", "BLACK")
+    remote_leds.set_color("LEFT", "BLACK")
+    remote_leds.set_color("RIGHT", "BLACK")
+    # sound.play_song((('C4', 'e'), ('D4', 'e'), ('E5', 'q')))
+    leds.set_color("LEFT", color)
+    leds.set_color("RIGHT", color)
+    remote_leds.set_color("LEFT", color)
+    remote_leds.set_color("RIGHT", color)
+
+set_led_colors("YELLOW")
 
 # Power
 power = PowerSupply(name_pattern='*ev3*')
@@ -124,7 +142,7 @@ logger.info("Shoulder touch sensor detected!")
 
 elbow_touch = TouchSensor(INPUT_4)
 logger.info("Elbow touch sensor detected!")
-
+    
 
 def motors_to_center():
     """ move all motors to their default position """
@@ -145,10 +163,10 @@ def motors_to_center():
 
 # Motors
 waist_motor = ColorSensorMotor(LargeMotor(
-    OUTPUT_A), speed=NORMAL_SPEED, name='waist', sensor=color_sensor, color=5)  # 5 = red
-shoulder_motors = LimitedRangeMotorSet(
-    [LargeMotor(OUTPUT_B), LargeMotor(OUTPUT_C)], speed=30, name='shoulder')
-elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max=-1000)
+    OUTPUT_A), speed=SLOW_SPEED, name='waist', sensor=color_sensor, color=5)  # 5 = red
+shoulder_motors = TouchSensorMotorSet(
+    [LargeMotor(OUTPUT_B), LargeMotor(OUTPUT_C)], speed=30, name='shoulder', inverted=True, sensor=shoulder_touch, max_position=1000)
+elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-1000)
 
 # Secondary EV3
 # Motors
@@ -158,7 +176,7 @@ pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_B), speed=10, name='pitch')
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
-    remote_motor.OUTPUT_C), maxPos=14 * 360, speed=20, name='spin')
+    remote_motor.OUTPUT_C), max_position=14 * 360, speed=20, name='spin')
 
 try:
     grabber_motor = LimitedRangeMotor(
@@ -171,11 +189,13 @@ except DeviceNotFound:
 
 
 def calibrate_motors():
+    set_led_colors("ORANGE")
     logger.info('Calibrating motors...')
 
     # Note that the order here matters. We want to ensure the shoulder is calibrated first so the elbow can 
     # reach it's full range without hitting the floor.
-    # shoulder_motors.calibrate()
+    shoulder_motors.calibrate()
+    sys.exit(1)
     # roll_motor.calibrate()
     elbow_motor.calibrate()
     elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.centerPos, True, True)
@@ -186,6 +206,8 @@ def calibrate_motors():
     pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
     # if grabber_motor:
     #     grabber_motor.calibrate(to_center=False)
+    
+    set_led_colors("BLUE")
 
 
 # Not sure why but resetting all motors before doing anything else seems to improve reliability
@@ -343,7 +365,7 @@ class MotorThread(threading.Thread):
                         shoulder_speed, shoulder_motors.minPos, True, False)
                 else:
                     shoulder_motors.on_to_position(
-                        shoulder_speed, shoulder_motors.maxPos, True, False)
+                        shoulder_speed, shoulder_motors.max_position, True, False)
             elif shoulder_motors.is_running:
                 shoulder_motors.stop()
 
@@ -354,7 +376,7 @@ class MotorThread(threading.Thread):
                         elbow_speed, elbow_motor.minPos, True, False)
                 else:
                     elbow_motor.on_to_position(
-                        elbow_speed, elbow_motor.maxPos, True, False)
+                        elbow_speed, elbow_motor.max_position, True, False)
             elif elbow_motor.is_running:
                 elbow_motor.stop()
 
@@ -375,14 +397,14 @@ class MotorThread(threading.Thread):
                     SLOW_SPEED, roll_motor.minPos, True, False)  # Left
             elif roll_right:
                 roll_motor.on_to_position(
-                    SLOW_SPEED, roll_motor.maxPos, True, False)  # Right
+                    SLOW_SPEED, roll_motor.max_position, True, False)  # Right
             elif roll_motor.is_running:
                 roll_motor.stop()
 
             # on/off control
             if pitch_up:
                 # pitch_motor.on_to_position(
-                #     SLOW_SPEED, pitch_motor.maxPos, True, False)  # Up
+                #     SLOW_SPEED, pitch_motor.max_position, True, False)  # Up
                 pitch_motor.on(VERY_SLOW_SPEED, False)
             elif pitch_down:
                 pitch_motor.on(-VERY_SLOW_SPEED, False)
@@ -397,7 +419,7 @@ class MotorThread(threading.Thread):
                     SLOW_SPEED, spin_motor.minPos, True, False)  # Left
             elif spin_right:
                 spin_motor.on_to_position(
-                    SLOW_SPEED, spin_motor.maxPos, True, False)  # Right
+                    SLOW_SPEED, spin_motor.max_position, True, False)  # Right
             elif spin_motor.is_running:
                 spin_motor.stop()
 
@@ -405,7 +427,7 @@ class MotorThread(threading.Thread):
             if grabber_motor:
                 if grabber_open:
                     # grabber_motor.on_to_position(
-                    #     NORMAL_SPEED, grabber_motor.maxPos, True, True)  # Close
+                    #     NORMAL_SPEED, grabber_motor.max_position, True, True)  # Close
                     # grabber_motor.stop()
                     grabber_motor.on(NORMAL_SPEED, False)
                 elif grabber_close:
