@@ -118,16 +118,24 @@ class LimitedRangeMotorSet(LimitedRangeMotor):
 
         if to_center:
             for motor in self._motor:
-                motor.on_to_position(self._speed, self.center_position, True, False)
+                if motor == self._motor[-1]:
+                    # wait on motor completion if last motor in set
+                    motor.on_to_position(self._speed, self.center_position, True, True)
+                else:
+                    # don't wait for completion if not last motor in set
+                    motor.on_to_position(self._speed, self.center_position, True, False)
 
-        # cant wait here because of motor set, so let's at least give it some time
-        time.sleep(1)
         print('Motor {} found max {}'.format(self._name, self._max_position))
 
     def on_to_position(self, speed, position, brake, wait):
         for motor in self._motor:
-            # @TODO hardcoded no-waiting because of dual motor setup
-            motor.on_to_position(speed, position, brake, False)
+            if motor == self._motor[-1]:
+                # if last motor in this set, honor wait variable
+                motor.on_to_position(speed, position, brake, wait)
+            else:
+                # if not last motor in this set, don't ever consider waiting
+                # even though it may have been requested
+                motor.on_to_position(speed, position, brake, False)
 
     def reset(self):
         for motor in self._motor:
@@ -228,15 +236,21 @@ class TouchSensorMotorSet(SmartMotorBase):
 
         if to_center:
             for motor in self._motor:
-                motor.on_to_position(self._speed, self.center_position, True, False)
-
-        # @TODO wait a bit
-        time.wait(1)
+                if motor == self._motor[-1]:
+                    # wait on motor completion if last motor in set
+                    motor.on_to_position(self._speed, self.center_position, True, True)
+                else:
+                    # don't wait for completion if not last motor in set
+                    motor.on_to_position(self._speed, self.center_position, True, False)
 
     def on_to_position(self, speed, position, brake, wait):
         for motor in self._motor:
-            # @TODO hardcoded no-waiting because of dual motor setup
-            motor.on_to_position(speed, position, brake, False)
+            if motor == self._motor[-1]:
+                # honor wait argument if last motor in set
+                motor.on_to_position(self._speed, self.center_position, True, wait)
+            else:
+                # don't wait for completion if not last motor in set, even if it may have been requested
+                motor.on_to_position(self._speed, self.center_position, True, False)
 
     def reset(self):
         for motor in self._motor:

@@ -30,7 +30,7 @@ import rpyc
 from signal import signal, SIGINT
 from ev3dev2 import DeviceNotFound
 from ev3dev2.led import Leds
-from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3, INPUT_4
+from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor, MoveTank
 from ev3dev2.power import PowerSupply
@@ -173,15 +173,13 @@ grabber_open = False
 grabber_close = False
 
 # We are running!
+speed_modifier = 0
 running = True
 
 
 def log_power_info():
-    logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts,2), round(power.measured_amps, 2)))
+    logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts, 2), round(power.measured_amps, 2)))
     logger.info('Remote battery power: {}V / {}A'.format(round(remote_power.measured_volts, 2), round(remote_power.measured_amps, 2)))
-
-
-speed_modifier = 0
 
 
 def calculate_speed(speed, max=100):
