@@ -51,7 +51,7 @@ class LimitedRangeMotor(SmartMotorBase):
 
     def calibrate(self, to_center=True):
         super().calibrate()
-        self._motor.on(-self._speed, False)
+        self._motor.on(self._speed, False)
 
         def checkMotorState(state):
             print(state)
@@ -65,7 +65,7 @@ class LimitedRangeMotor(SmartMotorBase):
         self._motor.reset()  # sets 0 point
         self._minPos = self._motor.position + self._motorPadding
 
-        self._motor.on(self._speed, False)
+        self._motor.on(-self._speed, False)
         self._motor.wait_until('stalled')
 
         # self._motor.wait(checkMotorState, 10000)
@@ -153,11 +153,12 @@ class ColorSensorMotor(SmartMotorBase):
     def calibrate(self):
         super().calibrate()
         if self._sensor.color != self._color:
-            # TODO: non hardcoded negative speed here to reverse direction
-            self._motor.on(-self._speed, False)
+            self._motor.on(self._speed, False)
             while self._sensor.color != self._color:
                 time.sleep(0.1)
-
+            
+            self._motor.stop()
+        
         self._motor.reset()
 
     @property
@@ -171,12 +172,13 @@ class TouchSensorMotor(SmartMotorBase):
     def __init__(self, motor, speed=10, name=None, sensor=None, max=None):
         self._sensor = sensor
         self._maxPos = max
+        self._minPos = 0
         super().__init__(motor, speed, name)
 
     def calibrate(self):
         super().calibrate()
         if not self._sensor.is_pressed:
-            self._motor.on(-self._speed, False)
+            self._motor.on(self._speed, False)
             self._sensor.wait_for_pressed()
 
         self._motor.reset()
