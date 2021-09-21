@@ -34,12 +34,15 @@ class SmartMotorBase:
     def center_position(self):
         return (self._max_position - self._min_position) / 2
 
-    def to_center(self):
-        raise NotImplementedError
+    @property
+    def current_position(self):
+        return self._motor.position
 
     def __getattr__(self, name):
         return getattr(self._motor, name)
 
+    def __str__(self):
+        return "Motor: {}, min: {}, center: {}, max: {}, current: {}".format(self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
 
 class StaticRangeMotor(SmartMotorBase):
     def __init__(self, motor, name, speed=30, padding=10, inverted=False, debug=False, max_position=None):
@@ -84,11 +87,47 @@ class LimitedRangeMotor(SmartMotorBase):
         print('Motor {} found max {}'.format(self._name, self._max_position))
 
 
-class LimitedRangeMotorSet(LimitedRangeMotor):
+class MotorSetBase:
+    def on_to_position(self, speed, position, brake, wait):
+        for motor in self._motor:
+            if motor == self._motor[-1]:
+                # if last motor in this set, honor wait variable
+                motor.on_to_position(speed, position, brake, wait)
+            else:
+                # if not last motor in this set, don't ever consider waiting
+                # even though it may have been requested
+                motor.on_to_position(speed, position, brake, False)
+
+    def reset(self):
+        for motor in self._motor:
+            motor.reset()
+
+    def stop(self):
+        for motor in self._motor:
+            motor.stop()
+
+    def on(self, speed):
+        for motor in self._motor:
+            motor.on(speed)
+
+    @property
+    def is_running(self):
+        return self._motor[0].is_running
+
+    @property
+    def current_position(self):
+        return self._motor[0].position
+
+    def __str__(self):
+        return "Motor: {}, min: {}, center: {}, max: {}, current: {}".format(self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
+
+
+
+class LimitedRangeMotorSet(MotorSetBase, SmartMotorBase):
     """ handle a set of motors with limited range of valid movements, using stall detection to determine usable range """
 
     def calibrate(self, to_center=True):
-        # super().calibrate()
+        super().calibrate(to_center)
         for motor in self._motor:
             motor.on(self._speed, False)
 
@@ -127,32 +166,6 @@ class LimitedRangeMotorSet(LimitedRangeMotor):
 
         print('Motor {} found max {}'.format(self._name, self._max_position))
 
-    def on_to_position(self, speed, position, brake, wait):
-        for motor in self._motor:
-            if motor == self._motor[-1]:
-                # if last motor in this set, honor wait variable
-                motor.on_to_position(speed, position, brake, wait)
-            else:
-                # if not last motor in this set, don't ever consider waiting
-                # even though it may have been requested
-                motor.on_to_position(speed, position, brake, False)
-
-    def reset(self):
-        for motor in self._motor:
-            motor.reset()
-
-    def stop(self):
-        for motor in self._motor:
-            motor.stop()
-
-    def on(self, speed):
-        for motor in self._motor:
-            motor.on(speed)
-
-    @property
-    def is_running(self):
-        return self._motor[0].is_running
-
 
 class ColorSensorMotor(SmartMotorBase):
     """ handle motors which initialize valid range of movement using a color sensor """
@@ -162,9 +175,9 @@ class ColorSensorMotor(SmartMotorBase):
     def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, color=None):
         self._sensor = sensor
         self._color = color
-        super().__init__(motor, speed, name)
+        super().__init__(motor, name, speed, padding, inverted, debug)
 
-    def calibrate(self, to_center=False):
+    def calibrate(self, to_center=True):
         super().calibrate(to_center)
         if self._sensor.color != self._color:
             self._motor.on(self._speed, False)
@@ -174,10 +187,27 @@ class ColorSensorMotor(SmartMotorBase):
             self._motor.stop()
 
         self._motor.reset()
+        print('found min position')
+        self._min_position = 0
+        
+        # determine full circle rotation length
+        while self._sensor.color == self._color:
+            self._motor.on(self._speed, False)
+            time.sleep(0.1)
 
-    @property
-    def center_position(self):
-        return 0
+        # wait to go full circle
+        if self._sensor.color != self._color:
+            self._motor.on(self._speed, False)
+            while self._sensor.color != self._color:
+                time.sleep(0.1)
+
+            self._motor.stop()
+        
+        print('found max position')
+        self._max_position = self._motor.position
+
+        if to_center:
+            self._motor.on_to_position(self._speed, self.center_position, True, True)
 
 
 class TouchSensorMotor(SmartMotorBase):
@@ -208,7 +238,7 @@ class TouchSensorMotor(SmartMotorBase):
             self._motor.on_to_position(self._speed, self.center_position, True, True)
 
 
-class TouchSensorMotorSet(SmartMotorBase):
+class TouchSensorMotorSet(MotorSetBase, SmartMotorBase):
     _sensor = None
 
     def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, max_position=None):
@@ -225,14 +255,14 @@ class TouchSensorMotorSet(SmartMotorBase):
         if not self._sensor.is_pressed:
             for motor in self._motor:
                 if self._inverted:
-                    self._motor.on(-self._speed, False)
+                    motor.on(-self._speed, False)
                 else:
-                    self._motor.on(self._speed, False)
+                    motor.on(self._speed, False)
 
             self._sensor.wait_for_pressed()
 
         for motor in self._motor:
-            self._motor.reset()
+            motor.reset()
 
         if to_center:
             for motor in self._motor:
@@ -242,28 +272,3 @@ class TouchSensorMotorSet(SmartMotorBase):
                 else:
                     # don't wait for completion if not last motor in set
                     motor.on_to_position(self._speed, self.center_position, True, False)
-
-    def on_to_position(self, speed, position, brake, wait):
-        for motor in self._motor:
-            if motor == self._motor[-1]:
-                # honor wait argument if last motor in set
-                motor.on_to_position(self._speed, self.center_position, True, wait)
-            else:
-                # don't wait for completion if not last motor in set, even if it may have been requested
-                motor.on_to_position(self._speed, self.center_position, True, False)
-
-    def reset(self):
-        for motor in self._motor:
-            motor.reset()
-
-    def stop(self):
-        for motor in self._motor:
-            motor.stop()
-
-    def on(self, speed):
-        for motor in self._motor:
-            motor.on(speed)
-
-    @property
-    def is_running(self):
-        return self._motor[0].is_running

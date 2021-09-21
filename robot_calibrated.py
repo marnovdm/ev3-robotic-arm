@@ -165,8 +165,8 @@ def motors_to_center():
 waist_motor = ColorSensorMotor(LargeMotor(
     OUTPUT_A), speed=SLOW_SPEED, name='waist', sensor=color_sensor, color=5)  # 5 = red
 shoulder_motors = TouchSensorMotorSet(
-    [LargeMotor(OUTPUT_B), LargeMotor(OUTPUT_C)], speed=30, name='shoulder', inverted=True, sensor=shoulder_touch, max_position=1000)
-elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-1000)
+    [LargeMotor(OUTPUT_B), LargeMotor(OUTPUT_C)], speed=30, name='shoulder', sensor=shoulder_touch, max_position=-1000)
+elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-850)
 
 # Secondary EV3
 # Motors
@@ -195,19 +195,24 @@ def calibrate_motors():
     # Note that the order here matters. We want to ensure the shoulder is calibrated first so the elbow can
     # reach it's full range without hitting the floor.
     shoulder_motors.calibrate()
-    sys.exit(1)
+    print(shoulder_motors)
+
     # roll_motor.calibrate()
     elbow_motor.calibrate()
-    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.centerPos, True, True)
+    print(elbow_motor)
+
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate()
+    print(waist_motor)
 
-    pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
+    # pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
     # if grabber_motor:
     #     grabber_motor.calibrate(to_center=False)
 
-    set_led_colors("BLUE")
+    # roll & spin motor are still missing here - spin motor can move indefinitely though
+
+    set_led_colors("AMBER")
 
 
 # Not sure why but resetting all motors before doing anything else seems to improve reliability
@@ -231,6 +236,8 @@ grabber_close = False
 
 # We are running!
 speed_modifier = 0
+waist_target_color = 0
+aligning_waist = False
 running = True
 
 
@@ -246,10 +253,6 @@ def calculate_speed(speed, max=100):
         return min(speed * 1.5, max)
     elif speed_modifier == 1:  # dpad down
         return min(speed / 1.5, max)
-
-
-waist_target_color = 0
-aligning_waist = False
 
 
 def align_waist_to_color(waist_target_color):
@@ -325,129 +328,39 @@ def clean_shutdown(signal_received=None, frame=None):
     if gamepad:
         gamepad.close()
 
+    leds.reset()
+    remote_leds.reset()
     logger.info('Shutdown completed.')
     sys.exit(0)
 
-
-class WaistAlignThread(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        logger.info("WaistAlignThread running!")
-        while running:
-            if waist_target_color != 0 and not aligning_waist:
-                align_waist_to_color(waist_target_color)
-            time.sleep(2)  # prevent performance impact, drawback is you need to hold the button for a bit before it registers
-        logger.info("WaistAlignThread stopping!")
-
-
-class MotorThread(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        logger.info("Engine running!")
-        # os.system('setfont Lat7-Terminus12x6')
-        leds.set_color("LEFT", "BLACK")
-        leds.set_color("RIGHT", "BLACK")
-        remote_leds.set_color("LEFT", "BLACK")
-        remote_leds.set_color("RIGHT", "BLACK")
-        # sound.play_song((('C4', 'e'), ('D4', 'e'), ('E5', 'q')))
-        leds.set_color("LEFT", "GREEN")
-        leds.set_color("RIGHT", "GREEN")
-        remote_leds.set_color("LEFT", "GREEN")
-        remote_leds.set_color("RIGHT", "GREEN")
-
-        logger.info("Starting main loop...")
-        while running:
-            # Proportional control
-            if shoulder_speed != 0:
-                if shoulder_speed > 0:
-                    shoulder_motors.on_to_position(
-                        shoulder_speed, shoulder_motors.minPos, True, False)
-                else:
-                    shoulder_motors.on_to_position(
-                        shoulder_speed, shoulder_motors.max_position, True, False)
-            elif shoulder_motors.is_running:
-                shoulder_motors.stop()
-
-            # Proportional control
-            if elbow_speed != 0:
-                if elbow_speed > 0:
-                    elbow_motor.on_to_position(
-                        elbow_speed, elbow_motor.minPos, True, False)
-                else:
-                    elbow_motor.on_to_position(
-                        elbow_speed, elbow_motor.max_position, True, False)
-            elif elbow_motor.is_running:
-                elbow_motor.stop()
-
-            # on/off control
-            if waist_left:
-                # logger.info('moving left...')
-                waist_motor.on(-SLOW_SPEED, False)  # Left
-            elif waist_right:
-                # logger.info('moving right...')
-                waist_motor.on(SLOW_SPEED, False)  # Right
-            elif waist_motor.is_running:
-                # logger.info('stopped moving left/right')
-                waist_motor.stop()
-
-            # on/off control
-            if roll_left:
-                roll_motor.on_to_position(
-                    SLOW_SPEED, roll_motor.minPos, True, False)  # Left
-            elif roll_right:
-                roll_motor.on_to_position(
-                    SLOW_SPEED, roll_motor.max_position, True, False)  # Right
-            elif roll_motor.is_running:
-                roll_motor.stop()
-
-            # on/off control
-            if pitch_up:
-                # pitch_motor.on_to_position(
-                #     SLOW_SPEED, pitch_motor.max_position, True, False)  # Up
-                pitch_motor.on(VERY_SLOW_SPEED, False)
-            elif pitch_down:
-                pitch_motor.on(-VERY_SLOW_SPEED, False)
-                # pitch_motor.on_to_position(
-                #     SLOW_SPEED, pitch_motor.minPos, True, False)  # Down
-            elif pitch_motor.is_running:
-                pitch_motor.stop()
-
-            # on/off control
-            if spin_left:
-                spin_motor.on_to_position(
-                    SLOW_SPEED, spin_motor.minPos, True, False)  # Left
-            elif spin_right:
-                spin_motor.on_to_position(
-                    SLOW_SPEED, spin_motor.max_position, True, False)  # Right
-            elif spin_motor.is_running:
-                spin_motor.stop()
-
-            # on/off control
-            if grabber_motor:
-                if grabber_open:
-                    # grabber_motor.on_to_position(
-                    #     NORMAL_SPEED, grabber_motor.max_position, True, True)  # Close
-                    # grabber_motor.stop()
-                    grabber_motor.on(NORMAL_SPEED, False)
-                elif grabber_close:
-                    # grabber_motor.on_to_position(
-                    #     NORMAL_SPEED, grabber_motor.minPos, True, True)  # Open
-                    # grabber_motor.stop()
-                    grabber_motor.on(-NORMAL_SPEED, False)
-                elif grabber_motor.is_running:
-                    grabber_motor.stop()
-
-        logger.info("Engine stopping!")
 
 
 # Ensure clean shutdown on CTRL+C
 signal(SIGINT, clean_shutdown)
 log_power_info()
 calibrate_motors()
+
+def demo_moves():
+    shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.center_position, True, True)
+    time.sleep(2)
+    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.min_position, True, True)
+    time.sleep(2)
+    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.max_position, True, True)
+    time.sleep(2)
+    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.center_position, True, True)
+    time.sleep(2)
+    waist_motor.on_to_position(waist_motor._speed, waist_motor.min_position + 200, True, True)
+    time.sleep(2)
+    shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.min_position, True, True)
+    time.sleep(2)
+    shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.max_position, True, True)
+    time.sleep(2)
+    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.max_position, True, True)
+    time.sleep(2)
+
+demo_moves()
+clean_shutdown()
+
 
 # Main motor control thread
 motor_thread = MotorThread()
@@ -572,3 +485,120 @@ if gamepad:
                 break
 
 clean_shutdown()
+
+
+import threading
+
+class MotorThread(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+    def run(self):
+        logger.info("Engine running!")
+        # os.system('setfont Lat7-Terminus12x6')
+        leds.set_color("LEFT", "BLACK")
+        leds.set_color("RIGHT", "BLACK")
+        remote_leds.set_color("LEFT", "BLACK")
+        remote_leds.set_color("RIGHT", "BLACK")
+        # sound.play_song((('C4', 'e'), ('D4', 'e'), ('E5', 'q')))
+        leds.set_color("LEFT", "GREEN")
+        leds.set_color("RIGHT", "GREEN")
+        remote_leds.set_color("LEFT", "GREEN")
+        remote_leds.set_color("RIGHT", "GREEN")
+
+        logger.info("Starting main loop...")
+        while running:
+            # Proportional control
+            if shoulder_speed != 0:
+                if shoulder_speed > 0:
+                    shoulder_motors.on_to_position(
+                        shoulder_speed, shoulder_motors.minPos, True, False)
+                else:
+                    shoulder_motors.on_to_position(
+                        shoulder_speed, shoulder_motors.max_position, True, False)
+            elif shoulder_motors.is_running:
+                shoulder_motors.stop()
+
+            # Proportional control
+            if elbow_speed != 0:
+                if elbow_speed > 0:
+                    elbow_motor.on_to_position(
+                        elbow_speed, elbow_motor.minPos, True, False)
+                else:
+                    elbow_motor.on_to_position(
+                        elbow_speed, elbow_motor.max_position, True, False)
+            elif elbow_motor.is_running:
+                elbow_motor.stop()
+
+            # on/off control
+            if waist_left:
+                # logger.info('moving left...')
+                waist_motor.on(-SLOW_SPEED, False)  # Left
+            elif waist_right:
+                # logger.info('moving right...')
+                waist_motor.on(SLOW_SPEED, False)  # Right
+            elif waist_motor.is_running:
+                # logger.info('stopped moving left/right')
+                waist_motor.stop()
+
+            # on/off control
+            if roll_left:
+                roll_motor.on_to_position(
+                    SLOW_SPEED, roll_motor.minPos, True, False)  # Left
+            elif roll_right:
+                roll_motor.on_to_position(
+                    SLOW_SPEED, roll_motor.max_position, True, False)  # Right
+            elif roll_motor.is_running:
+                roll_motor.stop()
+
+            # on/off control
+            if pitch_up:
+                # pitch_motor.on_to_position(
+                #     SLOW_SPEED, pitch_motor.max_position, True, False)  # Up
+                pitch_motor.on(VERY_SLOW_SPEED, False)
+            elif pitch_down:
+                pitch_motor.on(-VERY_SLOW_SPEED, False)
+                # pitch_motor.on_to_position(
+                #     SLOW_SPEED, pitch_motor.minPos, True, False)  # Down
+            elif pitch_motor.is_running:
+                pitch_motor.stop()
+
+            # on/off control
+            if spin_left:
+                spin_motor.on_to_position(
+                    SLOW_SPEED, spin_motor.minPos, True, False)  # Left
+            elif spin_right:
+                spin_motor.on_to_position(
+                    SLOW_SPEED, spin_motor.max_position, True, False)  # Right
+            elif spin_motor.is_running:
+                spin_motor.stop()
+
+            # on/off control
+            if grabber_motor:
+                if grabber_open:
+                    # grabber_motor.on_to_position(
+                    #     NORMAL_SPEED, grabber_motor.max_position, True, True)  # Close
+                    # grabber_motor.stop()
+                    grabber_motor.on(NORMAL_SPEED, False)
+                elif grabber_close:
+                    # grabber_motor.on_to_position(
+                    #     NORMAL_SPEED, grabber_motor.minPos, True, True)  # Open
+                    # grabber_motor.stop()
+                    grabber_motor.on(-NORMAL_SPEED, False)
+                elif grabber_motor.is_running:
+                    grabber_motor.stop()
+
+        logger.info("Engine stopping!")
+
+
+class WaistAlignThread(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+    def run(self):
+        logger.info("WaistAlignThread running!")
+        while running:
+            if waist_target_color != 0 and not aligning_waist:
+                align_waist_to_color(waist_target_color)
+            time.sleep(2)  # prevent performance impact, drawback is you need to hold the button for a bit before it registers
+        logger.info("WaistAlignThread stopping!")
