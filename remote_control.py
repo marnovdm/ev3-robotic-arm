@@ -175,12 +175,15 @@ grabber_close = False
 # We are running!
 running = True
 
+
 def log_power_info():
-    logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts,2 ), round(power.measured_amps, 2)))
+    logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts,2), round(power.measured_amps, 2)))
     logger.info('Remote battery power: {}V / {}A'.format(round(remote_power.measured_volts, 2), round(remote_power.measured_amps, 2)))
 
 
 speed_modifier = 0
+
+
 def calculate_speed(speed, max=100):
     if speed_modifier == 0:
         return min(speed, max)
@@ -188,10 +191,12 @@ def calculate_speed(speed, max=100):
         return min(speed * 1.5, max)
     elif speed_modifier == 1:  # dpad down
         return min(speed / 1.5, max)
-    
+
 
 waist_target_color = 0
 aligning_waist = False
+
+
 def align_waist_to_color(waist_target_color):
     if waist_target_color == -1:
         target_color = ColorSensor.COLOR_RED
@@ -201,13 +206,13 @@ def align_waist_to_color(waist_target_color):
         # if someone asks us to move to an unknown/unmapped
         # color, just make this a noop.
         return
-    
+
     # Set a flag for the MotorThread to prevent stopping the waist motor while
     # we're trying to align it
     global aligning_waist
     aligning_waist = True
 
-    # If we're not on the correct color, start moving but make sure there's a 
+    # If we're not on the correct color, start moving but make sure there's a
     # timeout to prevent trying forever.
     if color_sensor.color != target_color:
         logger.info('Moving to color {}...'.format(target_color))
@@ -216,17 +221,17 @@ def align_waist_to_color(waist_target_color):
         max_iterations = 100
         iterations = 0
         while color_sensor.color != target_color:
-            # wait a bit between checks. Ideally there would be a wait_for_color() 
-            # method or something, but as far as I know that's not possible with the 
+            # wait a bit between checks. Ideally there would be a wait_for_color()
+            # method or something, but as far as I know that's not possible with the
             # current libraries, so we do it like this.
             time.sleep(0.1)
-            
+
             # prevent running forver
             iterations += 1
             if iterations >= max_iterations:
                 logger.info('Failed to align waist to requested color {}'.format(target_color))
                 break
-        
+
         # we're either aligned or reached a timeout. Stop moving.
         waist_motor.stop()
 
@@ -240,7 +245,7 @@ def clean_shutdown(signal_received=None, frame=None):
 
     global running
     running = False
-    
+
     logger.info('waist..')
     waist_motor.stop()
     logger.info('shoulder..')
@@ -260,7 +265,7 @@ def clean_shutdown(signal_received=None, frame=None):
         logger.info('grabber..')
         grabber_motor.stop()
 
-    # See https://github.com/gvalkov/python-evdev/issues/19 if this raises exceptions, but it seems 
+    # See https://github.com/gvalkov/python-evdev/issues/19 if this raises exceptions, but it seems
     # stable now.
     gamepad.close()
 
@@ -305,7 +310,7 @@ class MotorThread(threading.Thread):
                 shoulder_motors.on(shoulder_speed, shoulder_speed)
             elif shoulder_motors.is_running:
                 shoulder_motors.stop()
-            
+
             # Proportional control
             if elbow_speed != 0:
                 elbow_motor.on(elbow_speed)
@@ -331,7 +336,7 @@ class MotorThread(threading.Thread):
 
             # on/off control
             #
-            # Pitch affects grabber as well, but to a lesser degree. We could improve this 
+            # Pitch affects grabber as well, but to a lesser degree. We could improve this
             # in the future to adjust grabber based on pitch movement as well.
             if pitch_up:
                 pitch_motor.on(calculate_speed(VERY_SLOW_SPEED))
@@ -344,15 +349,15 @@ class MotorThread(threading.Thread):
             #
             # If we keep spinning, the grabber motor can get stuck because it remains stationary
             # but is forced to move around the worm gear. We need to adjust it while spinning.
-            # 
-            # spin motor: 7:1 (=23.6RPM) 
+            #
+            # spin motor: 7:1 (=23.6RPM)
             # grabber motor: 1:1 (=165RPM) untill the worm gear which we need to keep steady
-            # 
-            # So, I think the grabber_motor needs to move 7 times slower than the spin_motor 
+            #
+            # So, I think the grabber_motor needs to move 7 times slower than the spin_motor
             # to maintain it's position.
-            # 
-            # NOTE: I'm using knob wheels to control the grabber, which is not smoothly rotating 
-            # at these low speeds. Therefor the grabber has to move a bit quicker for me, but I 
+            #
+            # NOTE: I'm using knob wheels to control the grabber, which is not smoothly rotating
+            # at these low speeds. Therefor the grabber has to move a bit quicker for me, but I
             # think when using regular gears the 7 ratio should be sufficient.
             # NOTE: Yes, with regular gears the calculated ratio is correct!
             GRABBER_SPIN_RATIO = 7
@@ -385,7 +390,7 @@ class MotorThread(threading.Thread):
                     grabber_motor.on(calculate_speed(-NORMAL_SPEED), False)
                 elif grabber_motor.is_running:
                     grabber_motor.stop()
-        
+
         logger.info("MotorThread stopping!")
 
 
@@ -492,7 +497,7 @@ for event in gamepad.read_loop():  # this loops infinitely
         elif event.code == 314 and event.value == 1:  # Share
             # debug info
             log_power_info()
-         
+
         elif event.code == 315 and event.value == 1:  # Options
             # debug info
             logger.info('Elbow motor state: {}'.format(elbow_motor.state))

@@ -19,7 +19,7 @@ import rpyc
 # Create a RPyC connection to the remote ev3dev device.
 # Use the hostname or IP address of the ev3dev device.
 # If this fails, verify your IP connectivty via ``ping X.X.X.X``
-conn = rpyc.classic.connect('1.1.1.1') #change this IP address for your slave EV3 brick
+conn = rpyc.classic.connect('1.1.1.1')  # change this IP address for your slave EV3 brick
 #remote_ev3 = conn.modules['ev3dev.ev3']
 remote_motor = conn.modules['ev3dev2.motor']
 remote_led = conn.modules['ev3dev2.led']
@@ -29,8 +29,11 @@ logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
 logger = logging.getLogger(__name__)
 
 ## Some helpers ##
+
+
 def scale(val, src, dst):
     return (float(val - src[0]) / (src[1] - src[0])) * (dst[1] - dst[0]) + dst[0]
+
 
 def scale_stick(value):
     return scale(value,(0,255),(-1000,1000))
@@ -38,12 +41,12 @@ def scale_stick(value):
 ## Initializing ##
 logger.info("Finding wireless controller...")
 devices = [evdev.InputDevice(fn) for fn in evdev.list_devices()]
-#for device in devices:
+# for device in devices:
 #    logger.info("{}".format(device.name))
 
-ps4gamepad = devices[0].fn # PS4 gamepad
-#ps4motion = devices[1].fn # PS4 accelerometer
-#ps4touchpad = devices[2].fn # PS4 touchpad
+ps4gamepad = devices[0].fn  # PS4 gamepad
+# ps4motion = devices[1].fn # PS4 accelerometer
+# ps4touchpad = devices[2].fn # PS4 touchpad
 
 gamepad = evdev.InputDevice(ps4gamepad)
 
@@ -81,8 +84,8 @@ grabber_ratio = 24
 
 waist_max = 360
 waist_min = -360
-shoulder_max = -60 #-75 max without grabber
-shoulder_min = 50 #65 min without grabber
+shoulder_max = -60  # -75 max without grabber
+shoulder_min = 50  # 65 min without grabber
 elbow_max = -175
 elbow_min = 0
 roll_max = 180
@@ -122,6 +125,7 @@ grabber_close = False
 
 running = True
 
+
 class MotorThread(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -146,7 +150,7 @@ class MotorThread(threading.Thread):
         waist_motor.on_to_position(fast_speed,0,True,True)
 
         shoulder_motor.on_for_degrees(normal_speed,normal_speed,shoulder_max*shoulder_ratio,True,True) #Forward
-        shoulder_motor.on_for_degrees(normal_speed,normal_speed,-shoulder_max*shoulder_ratio,True,True) 
+        shoulder_motor.on_for_degrees(normal_speed,normal_speed,-shoulder_max*shoulder_ratio,True,True)
         shoulder_motor.on_for_degrees(normal_speed,normal_speed,shoulder_min*shoulder_ratio,True,True) #Backward
         shoulder_motor.on_for_degrees(normal_speed,normal_speed,-shoulder_min*shoulder_ratio,True,True)
 
@@ -182,53 +186,53 @@ class MotorThread(threading.Thread):
         """
 
         while running:
-            if forward_speed > 0 and shoulder_control1.position > ((shoulder_max*shoulder_ratio)+100):
-                shoulder_motor.on( -normal_speed,-normal_speed )
-            elif forward_speed < 0 and shoulder_control1.position < ((shoulder_min*shoulder_ratio)-100):
-                shoulder_motor.on( normal_speed,normal_speed )
+            if forward_speed > 0 and shoulder_control1.position > ((shoulder_max * shoulder_ratio) + 100):
+                shoulder_motor.on(-normal_speed,-normal_speed)
+            elif forward_speed < 0 and shoulder_control1.position < ((shoulder_min * shoulder_ratio) - 100):
+                shoulder_motor.on(normal_speed,normal_speed)
             else:
                 shoulder_motor.stop()
 
             if upward_speed > 0:
-                elbow_motor.on_to_position(normal_speed,elbow_max*elbow_ratio,True,False) #Up
+                elbow_motor.on_to_position(normal_speed,elbow_max * elbow_ratio,True,False)  # Up
             elif upward_speed < 0:
-                elbow_motor.on_to_position(normal_speed,elbow_min*elbow_ratio,True,False) #Down
+                elbow_motor.on_to_position(normal_speed,elbow_min * elbow_ratio,True,False)  # Down
             else:
                 elbow_motor.stop()
 
             if turning_left:
-                waist_motor.on_to_position(fast_speed,waist_min*waist_ratio,True,False) #Left
+                waist_motor.on_to_position(fast_speed,waist_min * waist_ratio,True,False)  # Left
             elif turning_right:
-                waist_motor.on_to_position(fast_speed,waist_max*waist_ratio,True,False) #Right
+                waist_motor.on_to_position(fast_speed,waist_max * waist_ratio,True,False)  # Right
             else:
                 waist_motor.stop()
 
             if roll_left:
-                roll_motor.on_to_position(normal_speed,roll_min*roll_ratio,True,False) #Left
+                roll_motor.on_to_position(normal_speed,roll_min * roll_ratio,True,False)  # Left
             elif roll_right:
-                roll_motor.on_to_position(normal_speed,roll_max*roll_ratio,True,False) #Right
+                roll_motor.on_to_position(normal_speed,roll_max * roll_ratio,True,False)  # Right
             else:
                 roll_motor.stop()
 
             if pitch_up:
-                pitch_motor.on_to_position(normal_speed,pitch_max*pitch_ratio,True,False) #Up
+                pitch_motor.on_to_position(normal_speed,pitch_max * pitch_ratio,True,False)  # Up
             elif pitch_down:
-                pitch_motor.on_to_position(normal_speed,pitch_min*pitch_ratio,True,False) #Down
+                pitch_motor.on_to_position(normal_speed,pitch_min * pitch_ratio,True,False)  # Down
             else:
                 pitch_motor.stop()
 
             if spin_left:
-                spin_motor.on_to_position(normal_speed,spin_min*spin_ratio,True,False) #Left
+                spin_motor.on_to_position(normal_speed,spin_min * spin_ratio,True,False)  # Left
             elif spin_right:
-                spin_motor.on_to_position(normal_speed,spin_max*spin_ratio,True,False) #Right
+                spin_motor.on_to_position(normal_speed,spin_max * spin_ratio,True,False)  # Right
             else:
                 spin_motor.stop()
 
             if grabber_open:
-                grabber_motor.on_to_position(normal_speed,grabber_max*grabber_ratio,True,True) #Close
+                grabber_motor.on_to_position(normal_speed,grabber_max * grabber_ratio,True,True)  # Close
                 grabber_motor.stop()
             elif grabber_close:
-                grabber_motor.on_to_position(normal_speed,grabber_min*grabber_ratio,True,True) #Open
+                grabber_motor.on_to_position(normal_speed,grabber_min * grabber_ratio,True,True)  # Open
                 grabber_motor.stop()
             else:
                 grabber_motor.stop()
@@ -247,13 +251,13 @@ motor_thread.start()
 
 for event in gamepad.read_loop():   #this loops infinitely
     if event.type == 3:
-        if event.code == 0: #Left stick X-axis
+        if event.code == 0:  # Left stick X-axis
             forward_speed = scale_stick(event.value)
-        #if event.code == 1: #Left stick Y-axis
+        # if event.code == 1: #Left stick Y-axis
         #    forward_side_speed = scale_stick(event.value)
-        if event.code == 3: #Right stick X-axis
+        if event.code == 3:  # Right stick X-axis
             upward_speed = -scale_stick(event.value)
-        #if event.code == 4: #Right stick Y-axis
+        # if event.code == 4: #Right stick Y-axis
         #    upward_side_speed = scale_stick(event.value)
         if forward_speed < 100 and forward_speed > -100:
             forward_speed = 0
@@ -316,7 +320,7 @@ for event in gamepad.read_loop():   #this loops infinitely
     #     #Demo
 
     if event.type == 1 and event.code == 315 and event.value == 1:  #Options
-        #Reset
+        # Reset
         roll_motor.on_to_position(normal_speed,0,True,False)
         pitch_motor.on_to_position(normal_speed,0,True,False)
         spin_motor.on_to_position(normal_speed,0,True,False)
@@ -330,7 +334,7 @@ for event in gamepad.read_loop():   #this loops infinitely
         logger.info("Engine stopping!")
         running = False
 
-        #Reset
+        # Reset
         roll_motor.on_to_position(normal_speed,0,True,False)
         pitch_motor.on_to_position(normal_speed,0,True,False)
         spin_motor.on_to_position(normal_speed,0,True,False)
@@ -346,5 +350,5 @@ for event in gamepad.read_loop():   #this loops infinitely
         remote_leds.set_color("LEFT", "BLACK")
         remote_leds.set_color("RIGHT", "BLACK")
 
-        time.sleep(1) # Wait for the motor thread to finish
-        break 
+        time.sleep(1)  # Wait for the motor thread to finish
+        break

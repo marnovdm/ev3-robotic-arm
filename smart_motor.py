@@ -80,7 +80,7 @@ class LimitedRangeMotor(SmartMotorBase):
 
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
-        
+
         print('Motor {} found max {}'.format(self._name, self._max_position))
 
 
@@ -98,12 +98,12 @@ class LimitedRangeMotorSet(LimitedRangeMotor):
                 return True
 
             return False
-        
+
         self._motor[1].wait_until('stalled')
         # self._motor[1].wait(checkMotorState, 10000)
         for motor in self._motor:
             motor.reset()  # sets 0 point
-        
+
         self._min_position = self._motor[1].position + self._motorPadding
 
         for motor in self._motor:
@@ -115,7 +115,7 @@ class LimitedRangeMotorSet(LimitedRangeMotor):
             motor.stop()
 
         self._max_position = self._motor[1].position - self._motorPadding
-        
+
         if to_center:
             for motor in self._motor:
                 motor.on_to_position(self._speed, self.center_position, True, False)
@@ -162,9 +162,9 @@ class ColorSensorMotor(SmartMotorBase):
             self._motor.on(self._speed, False)
             while self._sensor.color != self._color:
                 time.sleep(0.1)
-            
+
             self._motor.stop()
-        
+
         self._motor.reset()
 
     @property
@@ -173,8 +173,8 @@ class ColorSensorMotor(SmartMotorBase):
 
 
 class TouchSensorMotor(SmartMotorBase):
-    """ 
-    Moves the motor until the related touch sensor is pressed and set's that position to 0. 
+    """
+    Moves the motor until the related touch sensor is pressed and set's that position to 0.
     The max_position argument is used to determine the max valid position.
     """
     _sensor = None
@@ -195,9 +195,10 @@ class TouchSensorMotor(SmartMotorBase):
             self._sensor.wait_for_pressed()
 
         self._motor.reset()
-        
+
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
+
 
 class TouchSensorMotorSet(SmartMotorBase):
     _sensor = None
@@ -205,7 +206,7 @@ class TouchSensorMotorSet(SmartMotorBase):
     def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, max_position=None):
         if not sensor:
             raise ValueError('missing sensor argument')
-        
+
         self._sensor = sensor
         self._max_position = max_position
         self._min_position = 0
@@ -219,16 +220,16 @@ class TouchSensorMotorSet(SmartMotorBase):
                     self._motor.on(-self._speed, False)
                 else:
                     self._motor.on(self._speed, False)
-            
+
             self._sensor.wait_for_pressed()
-        
+
         for motor in self._motor:
             self._motor.reset()
-        
+
         if to_center:
             for motor in self._motor:
                 motor.on_to_position(self._speed, self.center_position, True, False)
-        
+
         # @TODO wait a bit
         time.wait(1)
 

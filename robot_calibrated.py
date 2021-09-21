@@ -103,12 +103,10 @@ except DeviceNotFound:
     logger.info("Wireless controller not found - running without it")
 
 
-
-
-
 # LEDs
 leds = Leds()
 remote_leds = remote_led.Leds()
+
 
 def set_led_colors(color):
     leds.set_color("LEFT", "BLACK")
@@ -142,7 +140,7 @@ logger.info("Shoulder touch sensor detected!")
 
 elbow_touch = TouchSensor(INPUT_4)
 logger.info("Elbow touch sensor detected!")
-    
+
 
 def motors_to_center():
     """ move all motors to their default position """
@@ -192,21 +190,21 @@ def calibrate_motors():
     set_led_colors("ORANGE")
     logger.info('Calibrating motors...')
 
-    # Note that the order here matters. We want to ensure the shoulder is calibrated first so the elbow can 
+    # Note that the order here matters. We want to ensure the shoulder is calibrated first so the elbow can
     # reach it's full range without hitting the floor.
     shoulder_motors.calibrate()
     sys.exit(1)
     # roll_motor.calibrate()
     elbow_motor.calibrate()
     elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.centerPos, True, True)
-    # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not 
+    # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate()
 
     pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
     # if grabber_motor:
     #     grabber_motor.calibrate(to_center=False)
-    
+
     set_led_colors("BLUE")
 
 
@@ -232,12 +230,15 @@ grabber_close = False
 # We are running!
 running = True
 
+
 def log_power_info():
-    logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts,2 ), round(power.measured_amps, 2)))
+    logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts,2), round(power.measured_amps, 2)))
     logger.info('Remote battery power: {}V / {}A'.format(round(remote_power.measured_volts, 2), round(remote_power.measured_amps, 2)))
 
 
 speed_modifier = 0
+
+
 def calculate_speed(speed, max=100):
     if speed_modifier == 0:
         return min(speed, max)
@@ -245,10 +246,12 @@ def calculate_speed(speed, max=100):
         return min(speed * 1.5, max)
     elif speed_modifier == 1:  # dpad down
         return min(speed / 1.5, max)
-    
+
 
 waist_target_color = 0
 aligning_waist = False
+
+
 def align_waist_to_color(waist_target_color):
     if waist_target_color == -1:
         target_color = ColorSensor.COLOR_RED
@@ -258,13 +261,13 @@ def align_waist_to_color(waist_target_color):
         # if someone asks us to move to an unknown/unmapped
         # color, just make this a noop.
         return
-    
+
     # Set a flag for the MotorThread to prevent stopping the waist motor while
     # we're trying to align it
     global aligning_waist
     aligning_waist = True
 
-    # If we're not on the correct color, start moving but make sure there's a 
+    # If we're not on the correct color, start moving but make sure there's a
     # timeout to prevent trying forever.
     if color_sensor.color != target_color:
         logger.info('Moving to color {}...'.format(target_color))
@@ -273,17 +276,17 @@ def align_waist_to_color(waist_target_color):
         max_iterations = 100
         iterations = 0
         while color_sensor.color != target_color:
-            # wait a bit between checks. Ideally there would be a wait_for_color() 
-            # method or something, but as far as I know that's not possible with the 
+            # wait a bit between checks. Ideally there would be a wait_for_color()
+            # method or something, but as far as I know that's not possible with the
             # current libraries, so we do it like this.
             time.sleep(0.1)
-            
+
             # prevent running forver
             iterations += 1
             if iterations >= max_iterations:
                 logger.info('Failed to align waist to requested color {}'.format(target_color))
                 break
-        
+
         # we're either aligned or reached a timeout. Stop moving.
         waist_motor.stop()
 
@@ -297,7 +300,7 @@ def clean_shutdown(signal_received=None, frame=None):
 
     global running
     running = False
-    
+
     logger.info('waist..')
     waist_motor.stop()
     logger.info('shoulder..')
@@ -317,7 +320,7 @@ def clean_shutdown(signal_received=None, frame=None):
         logger.info('grabber..')
         grabber_motor.stop()
 
-    # See https://github.com/gvalkov/python-evdev/issues/19 if this raises exceptions, but it seems 
+    # See https://github.com/gvalkov/python-evdev/issues/19 if this raises exceptions, but it seems
     # stable now.
     if gamepad:
         gamepad.close()
@@ -437,7 +440,7 @@ class MotorThread(threading.Thread):
                     grabber_motor.on(-NORMAL_SPEED, False)
                 elif grabber_motor.is_running:
                     grabber_motor.stop()
-        
+
         logger.info("Engine stopping!")
 
 
@@ -545,7 +548,7 @@ if gamepad:
             elif event.code == 314 and event.value == 1:  # Share
                 # debug info
                 log_power_info()
-            
+
             elif event.code == 315 and event.value == 1:  # Options
                 # debug info
                 logger.info('Elbow motor state: {}'.format(elbow_motor.state))
@@ -569,9 +572,3 @@ if gamepad:
                 break
 
 clean_shutdown()
-
-
-
-
-
-
