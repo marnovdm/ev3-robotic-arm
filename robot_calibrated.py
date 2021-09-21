@@ -22,27 +22,22 @@ __author__ = 'Nino Guba'
 import logging
 import os
 import sys
-import threading
 import time
+from signal import SIGINT, signal
 
 import evdev
 import rpyc
-from signal import signal, SIGINT
-
 from ev3dev2 import DeviceNotFound
 from ev3dev2.led import Leds
-from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
-from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor
 from ev3dev2.power import PowerSupply
-
-
-# from ev3dev2.sound import Sound
+from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
+from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 from evdev import InputDevice
 
-from smart_motor import LimitedRangeMotor, ColorSensorMotor, StaticRangeMotor, TouchSensorMotor, TouchSensorMotorSet
 from math_helper import scale_stick
-
+from smart_motor import (ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
+                         TouchSensorMotor, TouchSensorMotorSet)
 
 # Config
 REMOTE_HOST = '10.42.0.3'
@@ -147,18 +142,18 @@ def motors_to_center():
     """ move all motors to their default position """
 
     shoulder_motors.on_to_position(
-        SLOW_SPEED, shoulder_motors.centerPos, True, True)
-    elbow_motor.on_to_position(SLOW_SPEED, elbow_motor.centerPos, True, True)
+        SLOW_SPEED, shoulder_motors.center_position, True, True)
+    elbow_motor.on_to_position(SLOW_SPEED, elbow_motor.center_position, True, True)
 
-    roll_motor.on_to_position(NORMAL_SPEED, roll_motor.centerPos, True, False)
+    roll_motor.on_to_position(NORMAL_SPEED, roll_motor.center_position, True, False)
     pitch_motor.on_to_position(NORMAL_SPEED, 0, True, False)
-    spin_motor.on_to_position(NORMAL_SPEED, spin_motor.centerPos, True, False)
+    spin_motor.on_to_position(NORMAL_SPEED, spin_motor.center_position, True, False)
 
     if grabber_motor:
         grabber_motor.on_to_position(
-            NORMAL_SPEED, grabber_motor.centerPos, True, True)
+            NORMAL_SPEED, grabber_motor.center_position, True, True)
 
-    waist_motor.on_to_position(FAST_SPEED, waist_motor.centerPos, True, True)
+    waist_motor.on_to_position(FAST_SPEED, waist_motor.center_position, True, True)
 
 
 # Motors
@@ -360,245 +355,3 @@ def demo_moves():
 
 demo_moves()
 clean_shutdown()
-
-
-# Main motor control thread
-motor_thread = MotorThread()
-motor_thread.setDaemon(True)
-motor_thread.start()
-
-# We only need the WaistAlignThread if we detected a color sensor
-if color_sensor:
-    waist_align_thread = WaistAlignThread()
-    waist_align_thread.setDaemon(True)
-    waist_align_thread.start()
-
-# Handle gamepad input
-if gamepad:
-    for event in gamepad.read_loop():  # this loops infinitely
-        if event.type == 3:  # stick input
-            if event.code == 0:  # Left stick X-axis
-                shoulder_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE, invert=True)
-            elif event.code == 3:  # Right stick X-axis
-                elbow_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE)
-            elif event.code == 17:  # dpad up/down
-                speed_modifier = event.value
-            elif event.code == 16:  # dpad left/right
-                waist_target_color = event.value
-
-        elif event.type == 1:  # button input
-
-            if event.code == 310:  # L1
-                if event.value == 1:
-                    waist_right = False
-                    waist_left = True
-                elif event.value == 0:
-                    waist_left = False
-
-            elif event.code == 311:  # R1
-                if event.value == 1:
-                    waist_left = False
-                    waist_right = True
-                elif event.value == 0:
-                    waist_right = False
-
-            elif event.code == 308:  # Square
-                if event.value == 1:
-                    roll_right = False
-                    roll_left = True
-                elif event.value == 0:
-                    roll_left = False
-
-            elif event.code == 305:  # Circle
-                if event.value == 1:
-                    roll_left = False
-                    roll_right = True
-                elif event.value == 0:
-                    roll_right = False
-
-            elif event.code == 307:  # Triangle
-                if event.value == 1:
-                    pitch_down = False
-                    pitch_up = True
-                elif event.value == 0:
-                    pitch_up = False
-
-            elif event.code == 304:  # X
-                if event.value == 1:
-                    pitch_up = False
-                    pitch_down = True
-                elif event.value == 0:
-                    pitch_down = False
-
-            elif event.code == 312:  # L2
-                if event.value == 1:
-                    spin_right = False
-                    spin_left = True
-                elif event.value == 0:
-                    spin_left = False
-
-            elif event.code == 313:  # R2
-                if event.value == 1:
-                    spin_left = False
-                    spin_right = True
-                elif event.value == 0:
-                    spin_right = False
-
-            elif event.code == 317:  # L3
-                if event.value == 1:
-                    grabber_close = False
-                    grabber_open = True
-                elif event.value == 0:
-                    grabber_open = False
-
-            elif event.code == 318:  # R3
-                if event.value == 1:
-                    grabber_open = False
-                    grabber_close = True
-                elif event.value == 0:
-                    grabber_close = False
-
-            elif event.code == 314 and event.value == 1:  # Share
-                # debug info
-                log_power_info()
-
-            elif event.code == 315 and event.value == 1:  # Options
-                # debug info
-                logger.info('Elbow motor state: {}'.format(elbow_motor.state))
-                logger.info('Elbow motor duty cycle: {}'.format(elbow_motor.duty_cycle))
-                logger.info('Elbow motor speed: {}'.format(elbow_motor.speed))
-
-            elif event.code == 316 and event.value == 1:  # PS
-                # stop control loop
-                running = False
-
-                # Move motors to default position
-                # motors_to_center()
-
-                # sound.play_song((('E5', 'e'), ('C4', 'e')))
-                leds.set_color("LEFT", "BLACK")
-                leds.set_color("RIGHT", "BLACK")
-                remote_leds.set_color("LEFT", "BLACK")
-                remote_leds.set_color("RIGHT", "BLACK")
-
-                time.sleep(1)  # Wait for the motor thread to finish
-                break
-
-clean_shutdown()
-
-
-import threading
-
-class MotorThread(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        logger.info("Engine running!")
-        # os.system('setfont Lat7-Terminus12x6')
-        leds.set_color("LEFT", "BLACK")
-        leds.set_color("RIGHT", "BLACK")
-        remote_leds.set_color("LEFT", "BLACK")
-        remote_leds.set_color("RIGHT", "BLACK")
-        # sound.play_song((('C4', 'e'), ('D4', 'e'), ('E5', 'q')))
-        leds.set_color("LEFT", "GREEN")
-        leds.set_color("RIGHT", "GREEN")
-        remote_leds.set_color("LEFT", "GREEN")
-        remote_leds.set_color("RIGHT", "GREEN")
-
-        logger.info("Starting main loop...")
-        while running:
-            # Proportional control
-            if shoulder_speed != 0:
-                if shoulder_speed > 0:
-                    shoulder_motors.on_to_position(
-                        shoulder_speed, shoulder_motors.minPos, True, False)
-                else:
-                    shoulder_motors.on_to_position(
-                        shoulder_speed, shoulder_motors.max_position, True, False)
-            elif shoulder_motors.is_running:
-                shoulder_motors.stop()
-
-            # Proportional control
-            if elbow_speed != 0:
-                if elbow_speed > 0:
-                    elbow_motor.on_to_position(
-                        elbow_speed, elbow_motor.minPos, True, False)
-                else:
-                    elbow_motor.on_to_position(
-                        elbow_speed, elbow_motor.max_position, True, False)
-            elif elbow_motor.is_running:
-                elbow_motor.stop()
-
-            # on/off control
-            if waist_left:
-                # logger.info('moving left...')
-                waist_motor.on(-SLOW_SPEED, False)  # Left
-            elif waist_right:
-                # logger.info('moving right...')
-                waist_motor.on(SLOW_SPEED, False)  # Right
-            elif waist_motor.is_running:
-                # logger.info('stopped moving left/right')
-                waist_motor.stop()
-
-            # on/off control
-            if roll_left:
-                roll_motor.on_to_position(
-                    SLOW_SPEED, roll_motor.minPos, True, False)  # Left
-            elif roll_right:
-                roll_motor.on_to_position(
-                    SLOW_SPEED, roll_motor.max_position, True, False)  # Right
-            elif roll_motor.is_running:
-                roll_motor.stop()
-
-            # on/off control
-            if pitch_up:
-                # pitch_motor.on_to_position(
-                #     SLOW_SPEED, pitch_motor.max_position, True, False)  # Up
-                pitch_motor.on(VERY_SLOW_SPEED, False)
-            elif pitch_down:
-                pitch_motor.on(-VERY_SLOW_SPEED, False)
-                # pitch_motor.on_to_position(
-                #     SLOW_SPEED, pitch_motor.minPos, True, False)  # Down
-            elif pitch_motor.is_running:
-                pitch_motor.stop()
-
-            # on/off control
-            if spin_left:
-                spin_motor.on_to_position(
-                    SLOW_SPEED, spin_motor.minPos, True, False)  # Left
-            elif spin_right:
-                spin_motor.on_to_position(
-                    SLOW_SPEED, spin_motor.max_position, True, False)  # Right
-            elif spin_motor.is_running:
-                spin_motor.stop()
-
-            # on/off control
-            if grabber_motor:
-                if grabber_open:
-                    # grabber_motor.on_to_position(
-                    #     NORMAL_SPEED, grabber_motor.max_position, True, True)  # Close
-                    # grabber_motor.stop()
-                    grabber_motor.on(NORMAL_SPEED, False)
-                elif grabber_close:
-                    # grabber_motor.on_to_position(
-                    #     NORMAL_SPEED, grabber_motor.minPos, True, True)  # Open
-                    # grabber_motor.stop()
-                    grabber_motor.on(-NORMAL_SPEED, False)
-                elif grabber_motor.is_running:
-                    grabber_motor.stop()
-
-        logger.info("Engine stopping!")
-
-
-class WaistAlignThread(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        logger.info("WaistAlignThread running!")
-        while running:
-            if waist_target_color != 0 and not aligning_waist:
-                align_waist_to_color(waist_target_color)
-            time.sleep(2)  # prevent performance impact, drawback is you need to hold the button for a bit before it registers
-        logger.info("WaistAlignThread stopping!")
