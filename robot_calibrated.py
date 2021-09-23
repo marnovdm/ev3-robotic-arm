@@ -171,7 +171,9 @@ pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_B), speed=10, name='pitch')
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
-    remote_motor.OUTPUT_C), max_position=14 * 360, speed=20, name='spin')
+   remote_motor.OUTPUT_C), max_position=14 * 360, speed=20, name='spin')
+# spin_motor = LimitedRangeMotor(remote_motor.MediumMotor(
+#    remote_motor.OUTPUT_C), speed=20, name='spin')
 
 try:
     grabber_motor = LimitedRangeMotor(
@@ -192,16 +194,21 @@ def calibrate_motors():
     shoulder_motors.calibrate()
     print(shoulder_motors)
 
-    # roll_motor.calibrate()
     elbow_motor.calibrate()
     print(elbow_motor)
+
+    # not strong enough yet
+    # roll_motor.calibrate()
+    # print(roll_motor)
 
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate()
     print(waist_motor)
 
+    # not strong enough yet :(
     # pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
+    # print(pitch_motor)
     # if grabber_motor:
     #     grabber_motor.calibrate(to_center=False)
 
@@ -250,48 +257,6 @@ def calculate_speed(speed, max=100):
         return min(speed / 1.5, max)
 
 
-def align_waist_to_color(waist_target_color):
-    if waist_target_color == -1:
-        target_color = ColorSensor.COLOR_RED
-    elif waist_target_color == 1:
-        target_color = ColorSensor.COLOR_BLUE
-    else:
-        # if someone asks us to move to an unknown/unmapped
-        # color, just make this a noop.
-        return
-
-    # Set a flag for the MotorThread to prevent stopping the waist motor while
-    # we're trying to align it
-    global aligning_waist
-    aligning_waist = True
-
-    # If we're not on the correct color, start moving but make sure there's a
-    # timeout to prevent trying forever.
-    if color_sensor.color != target_color:
-        logger.info('Moving to color {}...'.format(target_color))
-        waist_motor.on(NORMAL_SPEED)
-
-        max_iterations = 100
-        iterations = 0
-        while color_sensor.color != target_color:
-            # wait a bit between checks. Ideally there would be a wait_for_color()
-            # method or something, but as far as I know that's not possible with the
-            # current libraries, so we do it like this.
-            time.sleep(0.1)
-
-            # prevent running forver
-            iterations += 1
-            if iterations >= max_iterations:
-                logger.info('Failed to align waist to requested color {}'.format(target_color))
-                break
-
-        # we're either aligned or reached a timeout. Stop moving.
-        waist_motor.stop()
-
-    # update flag for MotorThead so waist control works again.
-    aligning_waist = False
-
-
 def clean_shutdown(signal_received=None, frame=None):
     """ make sure all motors are stopped when stopping this script """
     logger.info('Shutting down...')
@@ -336,6 +301,24 @@ log_power_info()
 calibrate_motors()
 
 def demo_moves():
+    shoulder_motors.to_position(50)
+    time.sleep(2)
+    waist_motor.to_position(75, wait=False)
+    elbow_motor.to_position(0)
+    time.sleep(2)
+    elbow_motor.to_position(100)
+    time.sleep(2)
+    elbow_motor.to_position(50)
+    time.sleep(2)
+    waist_motor.to_position(25, wait=False)
+    shoulder_motors.to_position(0)
+    time.sleep(2)
+    shoulder_motors.to_position(100)
+    time.sleep(2)
+    elbow_motor.to_position(100)
+    time.sleep(2)
+    
+    """
     shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.center_position, True, True)
     time.sleep(2)
     elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.min_position, True, True)
@@ -352,6 +335,7 @@ def demo_moves():
     time.sleep(2)
     elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.max_position, True, True)
     time.sleep(2)
+    """
 
 demo_moves()
 clean_shutdown()

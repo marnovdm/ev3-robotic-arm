@@ -38,6 +38,20 @@ class SmartMotorBase:
     def current_position(self):
         return self._motor.position
 
+    @property
+    def current_position_perc(self):
+        return (100 / (self._max_position - self._min_position)) * self.current_position
+
+    def perc_to_position(self, perc):
+        return (100 / (self._max_position - self._min_position)) * perc
+
+    def to_position(self, position_perc, speed=None, brake=True, wait=True):
+        if not speed:
+            speed = self._speed
+        
+        print('Moving motor to {}'.format(self.perc_to_position(position_perc)))
+        self._motor.on_to_position(speed, self.perc_to_position(position_perc), brake, wait)
+
     def __getattr__(self, name):
         return getattr(self._motor, name)
 
@@ -97,6 +111,22 @@ class MotorSetBase:
                 # if not last motor in this set, don't ever consider waiting
                 # even though it may have been requested
                 motor.on_to_position(speed, position, brake, False)
+
+    def to_position(self, position_perc, speed=None, brake=True, wait=True):
+        if not speed:
+            speed = self._speed
+        
+        for motor in self._motor:
+            print('Moving MotorSet to {}'.format(self.perc_to_position(position_perc)))
+            if motor == self._motor[-1]:
+                # if last motor in this set, honor wait variable
+                motor.on_to_position(speed, self.perc_to_position(position_perc), brake, wait)
+            else:
+                # if not last motor in this set, don't ever consider waiting
+                # even though it may have been requested
+                motor.on_to_position(speed, self.perc_to_position(position_perc), brake, False)
+
+        # self._motor.on_to_position(self.perc_to_position(position_perc), speed=speed, brake=brake, wait=wait)
 
     def reset(self):
         for motor in self._motor:
@@ -231,8 +261,15 @@ class TouchSensorMotor(SmartMotorBase):
         if not self._sensor.is_pressed:
             self._motor.on(self._speed, False)
             self._sensor.wait_for_pressed()
+            self._motor.stop()
+        
+        # make sure we're not pressing the button anymore before setting min position
+        if self._sensor.is_pressed:
+            self._motor.on(-self._speed, False)
+            self._sensor.wait_for_released()
 
         self._motor.reset()
+
 
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
@@ -260,7 +297,18 @@ class TouchSensorMotorSet(MotorSetBase, SmartMotorBase):
                     motor.on(self._speed, False)
 
             self._sensor.wait_for_pressed()
-
+            for motor in self._motor:
+                motor.stop()
+        
+        if self._sensor.is_pressed:
+            for motor in self._motor:
+                if self._inverted:
+                    motor.on(self._speed, False)
+                else:
+                    motor.on(-self._speed, False)
+            
+            self._sensor.wait_for_released()
+        
         for motor in self._motor:
             motor.reset()
 
