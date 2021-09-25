@@ -39,18 +39,13 @@ from ev3dev2.power import PowerSupply
 from evdev import InputDevice
 
 from math_helper import scale_stick
+from motor_thread import MotorThread
+from waist_align_thread import WaistAlignThread
 
 
 # Config
 REMOTE_HOST = '10.42.0.3'
 JOYSTICK_DEADZONE = 20
-
-# Define speeds
-FULL_SPEED = 100
-FAST_SPEED = 75
-NORMAL_SPEED = 50
-SLOW_SPEED = 25
-VERY_SLOW_SPEED = 10
 
 # Setup logging
 os.system('setfont Lat7-Terminus12x6')
@@ -82,7 +77,6 @@ def reset_motors():
 logger.info("Connecting RPyC to {}...".format(REMOTE_HOST))
 # change this IP address for your slave EV3 brick
 conn = rpyc.classic.connect(REMOTE_HOST)
-# remote_ev3 = conn.modules['ev3dev.ev3']
 remote_power_mod = conn.modules['ev3dev2.power']
 remote_motor = conn.modules['ev3dev2.motor']
 remote_led = conn.modules['ev3dev2.led']
@@ -103,9 +97,6 @@ remote_leds = remote_led.Leds()
 # Power
 power = PowerSupply(name_pattern='*ev3*')
 remote_power = remote_power_mod.PowerSupply(name_pattern='*ev3*')
-
-# Sound
-# sound = Sound()
 
 # Primary EV3
 # Sensors
@@ -152,49 +143,47 @@ except DeviceNotFound:
     grabber_motor = False
 
 
-devices = {'color_sensor': color_sensor, 'shoulder_touch': shoulder_touch, 'elbow_touch': elbow_touch, 'waist_motor': waist_motor, 'shoulder_motors': shoulder_motors, 'elbow_motor': elbow_motor, 'roll_motor': roll_motor, 'pitch_motor': pitch_motor, 'spin_motor': spin_motor, 'grabber_motor': grabber_motor}
+devices = {
+    'color_sensor': color_sensor, 
+    'shoulder_touch': shoulder_touch, 
+    'elbow_touch': elbow_touch, 
+    'waist_motor': waist_motor, 
+    'shoulder_motors': shoulder_motors, 
+    'elbow_motor': elbow_motor, 
+    'roll_motor': roll_motor, 
+    'pitch_motor': pitch_motor, 
+    'spin_motor': spin_motor, 
+    'grabber_motor': grabber_motor,
+    'leds': leds,
+    'remote_leds': remote_leds,
+}
 
 # Not sure why but resetting all motors before doing anything else seems to improve reliability
 reset_motors()
 
-
-# Variables for stick input
-shoulder_speed = 0
-elbow_speed = 0
-
-# Variables for button input
-waist_left = False
-waist_right = False
-roll_left = False
-roll_right = False
-pitch_up = False
-pitch_down = False
-spin_left = False
-spin_right = False
-grabber_open = False
-grabber_close = False
-
-# We are running!
-speed_modifier = 0
-running = True
-waist_target_color = 0
-aligning_waist = False
-
-state = {'shoulder_speed': shoulder_speed, 'elbow_speed': elbow_speed, 'waist_left': waist_left, 'waist_right': waist_right, 'roll_left': roll_left, 'roll_right': roll_right, 'pitch_up': pitch_up, 'pitch_down': pitch_down, 'spin_left': spin_left, 'spin_right': spin_right, 'grabber_open': grabber_open, 'grabber_close': grabber_close, 'speed_modifier': speed_modifier, 'running': running, 'waist_target_color': waist_target_color, 'aligning_waist': aligning_waist}
+state = {
+    'shoulder_speed': 0, 
+    'elbow_speed': 0, 
+    'waist_left': False, 
+    'waist_right': False, 
+    'roll_left': False, 
+    'roll_right': False, 
+    'pitch_up': False, 
+    'pitch_down': False, 
+    'spin_left': False, 
+    'spin_right': False, 
+    'grabber_open': False, 
+    'grabber_close': False, 
+    'speed_modifier': 0, 
+    'running': True, 
+    'waist_target_color': 0, 
+    'aligning_waist': False
+}
 
 
 def log_power_info():
     logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts, 2), round(power.measured_amps, 2)))
     logger.info('Remote battery power: {}V / {}A'.format(round(remote_power.measured_volts, 2), round(remote_power.measured_amps, 2)))
-
-
-def calculate_speed(speed, max=100):
-    if speed_modifier == 0:
-        return min(speed, max)
-    elif speed_modifier == -1:  # dpad up
-        return min(speed * 1.5, max)
-    elif speed_modifier == 1:  # dpad down
-        return min(speed / 1.5, max)
 
 
 def clean_shutdown(signal_received=None, frame=None):
@@ -231,187 +220,11 @@ def clean_shutdown(signal_received=None, frame=None):
     sys.exit(0)
 
 
-class WaistAlignThread(threading.Thread):
-    devices = None
-    state = None
-
-    def __init__(self, devices, state):
-        threading.Thread.__init__(self)
-        for key in devices:
-            setattr(self, key, devices[key])
-        self.state = state        
-    
-    def run(self):
-        logger.info("WaistAlignThread running!")
-        while self.state.running:
-            if self.state.waist_target_color != 0 and not self.state.aligning_waist:
-                self._align_waist_to_color(self.state.waist_target_color)
-            time.sleep(2)  # prevent performance impact, drawback is you need to hold the button for a bit before it registers
-        
-        logger.info("WaistAlignThread stopping!")
-
-    def _align_waist_to_color(self, waist_target_color):
-        if waist_target_color == -1:
-            target_color = ColorSensor.COLOR_RED
-        elif waist_target_color == 1:
-            target_color = ColorSensor.COLOR_BLUE
-        else:
-            # if someone asks us to move to an unknown/unmapped
-            # color, just make this a noop.
-            return
-
-        # Set a flag for the MotorThread to prevent stopping the waist motor while
-        # we're trying to align it
-        self.state.aligning_waist = True
-
-        # If we're not on the correct color, start moving but make sure there's a
-        # timeout to prevent trying forever.
-        if self.color_sensor.color != target_color:
-            logger.info('Moving to color {}...'.format(target_color))
-            self.waist_motor.on(NORMAL_SPEED)
-
-            max_iterations = 100
-            iterations = 0
-            while self.color_sensor.color != target_color:
-                # wait a bit between checks. Ideally there would be a wait_for_color()
-                # method or something, but as far as I know that's not possible with the
-                # current libraries, so we do it like this.
-                time.sleep(0.1)
-
-                # prevent running forver
-                iterations += 1
-                if iterations >= max_iterations:
-                    logger.info('Failed to align waist to requested color {}'.format(target_color))
-                    break
-
-            # we're either aligned or reached a timeout. Stop moving.
-            self.waist_motor.stop()
-
-        # update flag for MotorThead so waist control works again.
-        self.state.aligning_waist = False
-
-
-class MotorThread(threading.Thread):
-    devices = None
-    state = None
-
-    def __init__(self, devices, state):
-        threading.Thread.__init__(self)
-        for key in devices:
-            setattr(self, key, devices[key])
-        
-        self.state = state
-
-    def run(self):
-        logger.info("MotorThread running!")
-        # os.system('setfont Lat7-Terminus12x6')
-        self.leds.set_color("LEFT", "BLACK")
-        self.leds.set_color("RIGHT", "BLACK")
-        self.remote_leds.set_color("LEFT", "BLACK")
-        self.remote_leds.set_color("RIGHT", "BLACK")
-        # sound.play_song((('C4', 'e'), ('D4', 'e'), ('E5', 'q')))
-        self.leds.set_color("LEFT", "GREEN")
-        self.leds.set_color("RIGHT", "GREEN")
-        self.remote_leds.set_color("LEFT", "GREEN")
-        self.remote_leds.set_color("RIGHT", "GREEN")
-
-        logger.info("Starting main loop...")
-        while self.state.running:
-            # Proportional control
-            if self.state.shoulder_speed != 0:
-                self.shoulder_motors.on(self.state.shoulder_speed, self.state.shoulder_speed)
-            elif self.shoulder_motors.is_running:
-                self.shoulder_motors.stop()
-
-            # Proportional control
-            if self.state.elbow_speed != 0:
-                self.elbow_motor.on(self.state.elbow_speed)
-            elif self.elbow_motor.is_running:
-                self.elbow_motor.stop()
-
-            # on/off control
-            if not self.state.aligning_waist:
-                if self.state.waist_left:
-                    self.waist_motor.on(calculate_speed(-SLOW_SPEED))
-                elif waist_right:
-                    self.waist_motor.on(calculate_speed(SLOW_SPEED))
-                elif self.waist_motor.is_running:
-                    self.waist_motor.stop()
-
-            # on/off control
-            if self.state.roll_left:
-                self.roll_motor.on(calculate_speed(-SLOW_SPEED))
-            elif self.state.roll_right:
-                self.roll_motor.on(calculate_speed(SLOW_SPEED))
-            elif self.roll_motor.is_running:
-                self.roll_motor.stop()
-
-            # on/off control
-            #
-            # Pitch affects grabber as well, but to a lesser degree. We could improve this
-            # in the future to adjust grabber based on pitch movement as well.
-            if self.state.pitch_up:
-                self.pitch_motor.on(calculate_speed(VERY_SLOW_SPEED))
-            elif self.state.pitch_down:
-                self.pitch_motor.on(calculate_speed(-VERY_SLOW_SPEED))
-            elif self.pitch_motor.is_running:
-                self.pitch_motor.stop()
-
-            # on/off control
-            #
-            # If we keep spinning, the grabber motor can get stuck because it remains stationary
-            # but is forced to move around the worm gear. We need to adjust it while spinning.
-            #
-            # spin motor: 7:1 (=23.6RPM)
-            # grabber motor: 1:1 (=165RPM) untill the worm gear which we need to keep steady
-            #
-            # So, I think the grabber_motor needs to move 7 times slower than the spin_motor
-            # to maintain it's position.
-            #
-            # NOTE: I'm using knob wheels to control the grabber, which is not smoothly rotating
-            # at these low speeds. Therefor the grabber has to move a bit quicker for me, but I
-            # think when using regular gears the 7 ratio should be sufficient.
-            # NOTE: Yes, with regular gears the calculated ratio is correct!
-            GRABBER_SPIN_RATIO = 7
-            if self.state.spin_left:
-                spin_motor_speed = calculate_speed(-SLOW_SPEED)
-                self.spin_motor.on(spin_motor_speed)
-                if self.grabber_motor:
-                    # determine grabber_motor speed based on spin_motor speed & invert
-                    grabber_spin_sync_speed = (spin_motor_speed / GRABBER_SPIN_RATIO) * -1
-                    self.grabber_motor.on(grabber_spin_sync_speed, False)
-                    # logger.info('Spin motor {}, grabber {}'.format(spin_motor_speed, grabber_spin_sync_speed))
-            elif self.state.spin_right:
-                spin_motor_speed = calculate_speed(SLOW_SPEED)
-                self.spin_motor.on(spin_motor_speed)
-                if self.grabber_motor:
-                    # determine grabber_motor speed based on spin_motor speed & invert
-                    grabber_spin_sync_speed = (spin_motor_speed / GRABBER_SPIN_RATIO) * -1
-                    self.grabber_motor.on(grabber_spin_sync_speed, False)
-                    # logger.info('Spin motor {}, grabber {}'.format(spin_motor_speed, grabber_spin_sync_speed))
-            elif self.spin_motor.is_running:
-                self.spin_motor.stop()
-                if self.grabber_motor:
-                    self.grabber_motor.stop()
-
-            # on/off control - can only control this directly if we're not currently spinning
-            elif self.grabber_motor:
-                if self.state.grabber_open:
-                    self.grabber_motor.on(calculate_speed(NORMAL_SPEED), False)
-                elif self.state.grabber_close:
-                    self.grabber_motor.on(calculate_speed(-NORMAL_SPEED), False)
-                elif self.grabber_motor.is_running:
-                    self.grabber_motor.stop()
-
-        logger.info("MotorThread stopping!")
-
-
 # Ensure clean shutdown on CTRL+C
 signal(SIGINT, clean_shutdown)
 
 log_power_info()
-devices = {}
-state = {}
+
 
 # Main motor control thread
 motor_thread = MotorThread(devices, state)
@@ -428,85 +241,85 @@ if color_sensor:
 for event in gamepad.read_loop():  # this loops infinitely
     if event.type == 3:  # stick input
         if event.code == 0:  # Left stick X-axis
-            shoulder_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE, invert=True)
+            state.shoulder_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE, invert=True)
         elif event.code == 3:  # Right stick X-axis
-            elbow_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE)
+            state.elbow_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE)
         elif event.code == 17:  # dpad up/down
-            speed_modifier = event.value
+            state.speed_modifier = event.value
         elif event.code == 16:  # dpad left/right
-            waist_target_color = event.value
+            state.waist_target_color = event.value
 
     elif event.type == 1:  # button input
 
         if event.code == 310:  # L1
             if event.value == 1:
-                waist_right = False
-                waist_left = True
+                state.waist_right = False
+                state.waist_left = True
             elif event.value == 0:
-                waist_left = False
+                state.waist_left = False
 
         elif event.code == 311:  # R1
             if event.value == 1:
-                waist_left = False
-                waist_right = True
+                state.waist_left = False
+                state.waist_right = True
             elif event.value == 0:
-                waist_right = False
+                state.waist_right = False
 
         elif event.code == 308:  # Square
             if event.value == 1:
-                roll_right = False
-                roll_left = True
+                state.roll_right = False
+                state.roll_left = True
             elif event.value == 0:
-                roll_left = False
+                state.roll_left = False
 
         elif event.code == 305:  # Circle
             if event.value == 1:
-                roll_left = False
-                roll_right = True
+                state.roll_left = False
+                state.roll_right = True
             elif event.value == 0:
-                roll_right = False
+                state.roll_right = False
 
         elif event.code == 307:  # Triangle
             if event.value == 1:
-                pitch_down = False
-                pitch_up = True
+                state.pitch_down = False
+                state.pitch_up = True
             elif event.value == 0:
-                pitch_up = False
+                state.pitch_up = False
 
         elif event.code == 304:  # X
             if event.value == 1:
-                pitch_up = False
-                pitch_down = True
+                state.pitch_up = False
+                state.pitch_down = True
             elif event.value == 0:
-                pitch_down = False
+                state.pitch_down = False
 
         elif event.code == 312:  # L2
             if event.value == 1:
-                spin_right = False
-                spin_left = True
+                state.spin_right = False
+                state.spin_left = True
             elif event.value == 0:
-                spin_left = False
+                state.spin_left = False
 
         elif event.code == 313:  # R2
             if event.value == 1:
-                spin_left = False
-                spin_right = True
+                state.spin_left = False
+                state.spin_right = True
             elif event.value == 0:
-                spin_right = False
+                state.spin_right = False
 
         elif event.code == 317:  # L3
             if event.value == 1:
-                grabber_close = False
-                grabber_open = True
+                state.grabber_close = False
+                state.grabber_open = True
             elif event.value == 0:
-                grabber_open = False
+                state.grabber_open = False
 
         elif event.code == 318:  # R3
             if event.value == 1:
-                grabber_open = False
-                grabber_close = True
+                state.grabber_open = False
+                state.grabber_close = True
             elif event.value == 0:
-                grabber_close = False
+                state.grabber_close = False
 
         elif event.code == 314 and event.value == 1:  # Share
             # debug info
@@ -520,7 +333,7 @@ for event in gamepad.read_loop():  # this loops infinitely
 
         elif event.code == 316 and event.value == 1:  # PS
             # stop control loop
-            running = False
+            state.running = False
 
             # Move motors to default position
             # motors_to_center()
