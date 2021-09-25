@@ -301,6 +301,7 @@ calibrate_motors()
 
 
 def demo_moves():
+    """ helper method to show some demo moves for robot arm """
     shoulder_motors.to_position(50)
     time.sleep(2)
     waist_motor.to_position(75, wait=False)
@@ -317,25 +318,6 @@ def demo_moves():
     time.sleep(2)
     elbow_motor.to_position(100)
     time.sleep(2)
-
-    """
-    shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.center_position, True, True)
-    time.sleep(2)
-    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.min_position, True, True)
-    time.sleep(2)
-    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.max_position, True, True)
-    time.sleep(2)
-    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.center_position, True, True)
-    time.sleep(2)
-    waist_motor.on_to_position(waist_motor._speed, waist_motor.min_position + 200, True, True)
-    time.sleep(2)
-    shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.min_position, True, True)
-    time.sleep(2)
-    shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.max_position, True, True)
-    time.sleep(2)
-    elbow_motor.on_to_position(elbow_motor._speed, elbow_motor.max_position, True, True)
-    time.sleep(2)
-    """
 
 demo_moves()
 clean_shutdown()

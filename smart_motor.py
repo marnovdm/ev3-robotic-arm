@@ -9,7 +9,7 @@ class SmartMotorBase:
     _name = None
     _min_position = None
     _max_position = None
-    _motorPadding = 10
+    _padding = 10
 
     def __init__(self, motor, name, speed=30, padding=10, inverted=False, debug=False):
         self._motor = motor
@@ -77,24 +77,15 @@ class LimitedRangeMotor(SmartMotorBase):
         super().calibrate(to_center)
         self._motor.on(self._speed, False)
 
-        def checkMotorState(state):
-            print(state)
-            if 'overloaded' in state or 'stalled' in state:
-                return True
-
-            return False
-
-        # self._motor.wait(checkMotorState, 10000)
         self._motor.wait_until('stalled')
         self._motor.reset()  # sets 0 point
-        self._min_position = self._motor.position + self._motorPadding
+        self._min_position = self._motor.position + self._padding
 
         self._motor.on(-self._speed, False)
         self._motor.wait_until('stalled')
 
-        # self._motor.wait(checkMotorState, 10000)
         self._motor.stop()
-        self._max_position = self._motor.position - self._motorPadding
+        self._max_position = self._motor.position - self._padding
 
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
@@ -102,7 +93,7 @@ class LimitedRangeMotor(SmartMotorBase):
         print('Motor {} found max {}'.format(self._name, self._max_position))
 
 
-class MotorSetBase:
+class MotorSetBase(SmartMotorBase):
     def on_to_position(self, speed, position, brake, wait):
         for motor in self._motor:
             if motor == self._motor[-1]:
@@ -153,7 +144,7 @@ class MotorSetBase:
         return "Motor: {}, min: {}, center: {}, max: {}, current: {}".format(self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
 
 
-class LimitedRangeMotorSet(MotorSetBase, SmartMotorBase):
+class LimitedRangeMotorSet(MotorSetBase):
     """ handle a set of motors with limited range of valid movements, using stall detection to determine usable range """
 
     def calibrate(self, to_center=True):
@@ -161,29 +152,20 @@ class LimitedRangeMotorSet(MotorSetBase, SmartMotorBase):
         for motor in self._motor:
             motor.on(self._speed, False)
 
-        def checkMotorState(state):
-            print(state)
-            if 'overloaded' in state or 'stalled' in state:
-                return True
-
-            return False
-
         self._motor[1].wait_until('stalled')
-        # self._motor[1].wait(checkMotorState, 10000)
         for motor in self._motor:
             motor.reset()  # sets 0 point
 
-        self._min_position = self._motor[1].position + self._motorPadding
+        self._min_position = self._motor[1].position + self._padding
 
         for motor in self._motor:
             motor.on(-self._speed, False)
 
-        # self._motor[1].wait(checkMotorState, 10000)
         self._motor[1].wait_until('stalled')
         for motor in self._motor:
             motor.stop()
 
-        self._max_position = self._motor[1].position - self._motorPadding
+        self._max_position = self._motor[1].position - self._padding
 
         if to_center:
             for motor in self._motor:
@@ -274,7 +256,7 @@ class TouchSensorMotor(SmartMotorBase):
             self._motor.on_to_position(self._speed, self.center_position, True, True)
 
 
-class TouchSensorMotorSet(MotorSetBase, SmartMotorBase):
+class TouchSensorMotorSet(MotorSetBase):
     _sensor = None
 
     def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, max_position=None):
