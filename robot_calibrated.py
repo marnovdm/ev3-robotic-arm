@@ -294,11 +294,11 @@ def clean_shutdown(signal_received=None, frame=None):
     sys.exit(0)
 
 
-
 # Ensure clean shutdown on CTRL+C
 signal(SIGINT, clean_shutdown)
 log_power_info()
 calibrate_motors()
+
 
 def demo_moves():
     shoulder_motors.to_position(50)
@@ -317,7 +317,7 @@ def demo_moves():
     time.sleep(2)
     elbow_motor.to_position(100)
     time.sleep(2)
-    
+
     """
     shoulder_motors.on_to_position(shoulder_motors._speed, shoulder_motors.center_position, True, True)
     time.sleep(2)
