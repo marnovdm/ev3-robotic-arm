@@ -25,7 +25,7 @@ import sys
 import time
 from signal import SIGINT, signal
 
-import evdev
+# import evdev
 import rpyc
 from ev3dev2 import DeviceNotFound
 from ev3dev2.led import Leds
@@ -90,6 +90,7 @@ logger.info("RPyC started succesfully")
 
 # Gamepad
 # If bluetooth is not available, check https://github.com/ev3dev/ev3dev/issues/1314
+"""
 try:
     logger.info("Connecting wireless controller...")
     gamepad = InputDevice(evdev.list_devices()[0])
@@ -99,6 +100,8 @@ except DeviceNotFound:
     gamepad = False
     logger.info("Wireless controller not found - running without it")
 
+logger.info("Wireless controller connected!")
+"""
 
 # LEDs
 leds = Leds()
@@ -183,8 +186,6 @@ spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
 # spin_motor = TouchSensorMotor(remote_motor.MediumMotor(
 #     remote_motor.OUTPUT_C), speed=20, name='spin', sensor=spin_touch, max_position=500)
 
-# [grab][spin][pitch][roll][elbow][shoulder][waist]
-
 try:
     grabber_motor = LimitedRangeMotor(
         remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=20, name='grabber')
@@ -202,14 +203,14 @@ def calibrate_motors():
     # Note that the order here matters. We want to ensure the shoulder is calibrated first so the elbow can
     # reach it's full range without hitting the floor.
     shoulder_motors.calibrate()
-    print(shoulder_motors)
-
+    logger.debug(shoulder_motors)
+    
     elbow_motor.calibrate(to_center=False)
-    print(elbow_motor)
+    logger.debug(elbow_motor)
 
     # roll first, because otherwise we might not be able to move elbow all the way
     roll_motor.calibrate()
-    print(roll_motor)
+    logger.debug(roll_motor)
 
     # shoulder_motors.to_position(50, wait=False)
     elbow_motor.to_position(50)
@@ -217,7 +218,7 @@ def calibrate_motors():
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate()
-    print(waist_motor)
+    logger.debug(waist_motor)
 
     # not strong enough yet :(
     # pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
@@ -293,8 +294,8 @@ def clean_shutdown(signal_received=None, frame=None):
 
     # See https://github.com/gvalkov/python-evdev/issues/19 if this raises exceptions, but it seems
     # stable now.
-    if gamepad:
-        gamepad.close()
+    # if gamepad:
+    #     gamepad.close()
 
     leds.reset()
     remote_leds.reset()
@@ -311,14 +312,18 @@ calibrate_motors()
 def moves_from_file(command_file):
     with open(command_file, 'r') as commands:
         for command in commands.readlines():
-            print(command.rstrip().split(','))
+            # CSV format:
+            # timing,waist,shoulder,elbow,roll,pitch,spin,grab
+            logger.info(command.rstrip().split(','))
 
 
 def demo_moves():
     """ helper method to show some demo moves for robot arm """
+    
     shoulder_motors.to_position(50)
     time.sleep(2)
     waist_motor.to_position(75, wait=False)
+    roll_motor.to_position(20, wait=False)
     elbow_motor.to_position(0)
     time.sleep(2)
     elbow_motor.to_position(100)
@@ -332,6 +337,24 @@ def demo_moves():
     time.sleep(2)
     elbow_motor.to_position(100)
     time.sleep(2)
+
+    shoulder_motors.to_position(25, wait=False)
+    elbow_motor.to_position(25, wait=False)
+    roll_motor.to_position(80, wait=False)
+    waist_motor.to_position(0)
+    time.sleep(2)
+    
+    shoulder_motors.to_position(75, wait=False)
+    elbow_motor.to_position(75, wait=False)
+    roll_motor.to_position(20, wait=False)
+    waist_motor.to_position(25)
+    time.sleep(2)
+
+    # to default pos
+    shoulder_motors.to_position(0)
+    elbow_motor.to_position(0)
+    roll_motor.to_position(0)
+    waist_motor.to_position(0)
 
 moves_from_file('commands.csv')
 demo_moves()

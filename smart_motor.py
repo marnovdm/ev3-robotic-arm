@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import time
-
+import logging
+logger = logging.getLogger('robot_calibrated')
 
 class SmartMotorBase:
     """ base class for handling motors """
@@ -20,7 +21,7 @@ class SmartMotorBase:
         self._debug = debug
 
     def calibrate(self, to_center=True):
-        print('Calibrating {}...'.format(self._name))
+        logger.info('Calibrating {}...'.format(self._name))
 
     @property
     def max_position(self):
@@ -32,7 +33,7 @@ class SmartMotorBase:
 
     @property
     def center_position(self):
-        return (self._max_position - self._min_position) / 2
+        return int((self._max_position - self._min_position) / 2)
 
     @property
     def current_position(self):
@@ -40,23 +41,23 @@ class SmartMotorBase:
 
     @property
     def current_position_perc(self):
-        return (100 / (self._max_position - self._min_position)) * self.current_position
+        return int(((self._max_position - self._min_position) / 100) * self.current_position)
 
     def perc_to_position(self, perc):
-        return (100 / (self._max_position - self._min_position)) * perc
+        return int(((self._max_position - self._min_position) / 100) * perc)
 
     def to_position(self, position_perc, speed=None, brake=True, wait=True):
         if not speed:
             speed = self._speed
 
-        print('Moving motor {} to {}% (position: {})'.format(self._name, position_perc, self.perc_to_position(position_perc)))
+        logger.info('Moving {} to {}% (current: {}, target: {})'.format(self._name, position_perc, self.current_position, self.perc_to_position(position_perc)))
         self._motor.on_to_position(speed, self.perc_to_position(position_perc), brake, wait)
 
     def __getattr__(self, name):
         return getattr(self._motor, name)
 
     def __str__(self):
-        return "Motor: {}, device: {}, min: {}, center: {}, max: {}, current: {}".format(self._name, self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
+        return "Motor: {}, min: {}, center: {}, max: {}, current: {}".format(self._name, self.min_position, self.center_position, self.max_position, self.current_position)
 
 
 class StaticRangeMotor(SmartMotorBase):
@@ -90,7 +91,7 @@ class LimitedRangeMotor(SmartMotorBase):
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
 
-        print('Motor {} found max {}'.format(self._name, self._max_position))
+        logger.info('Motor {} found max {}'.format(self._name, self._max_position))
 
 
 class MotorSetBase(SmartMotorBase):
@@ -107,10 +108,10 @@ class MotorSetBase(SmartMotorBase):
     def to_position(self, position_perc, speed=None, brake=True, wait=True):
         if not speed:
             speed = self._speed
-
+        
+        logger.info('Moving {} to {}% (current: {}, target: {})'.format(self._name, position_perc, self.current_position, self.perc_to_position(position_perc)))
         for motor in self._motor:
             # print('Moving MotorSet {} to {}'.format(self._name, self.perc_to_position(position_perc)))
-            print('Moving MotorSet {} to {}% (position: {})'.format(self._name, position_perc, self.perc_to_position(position_perc)))
             if motor == self._motor[-1]:
                 # if last motor in this set, honor wait variable
                 motor.on_to_position(speed, self.perc_to_position(position_perc), brake, wait)
@@ -142,7 +143,7 @@ class MotorSetBase(SmartMotorBase):
         return self._motor[0].position
 
     def __str__(self):
-        return "Motor {}: devices: {}, min: {}, center: {}, max: {}, current: {}".format(self._name, self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
+        return "Motor: {}, min: {}, center: {}, max: {}, current: {}".format(self._name, self.min_position, self.center_position, self.max_position, self.current_position)
 
 
 class LimitedRangeMotorSet(MotorSetBase):
@@ -177,7 +178,7 @@ class LimitedRangeMotorSet(MotorSetBase):
                     # don't wait for completion if not last motor in set
                     motor.on_to_position(self._speed, self.center_position, True, False)
 
-        print('Motor {} found max {}'.format(self._name, self._max_position))
+        logger.info('Motor {} found max {}'.format(self._name, self._max_position))
 
 
 class ColorSensorMotor(SmartMotorBase):
@@ -200,7 +201,7 @@ class ColorSensorMotor(SmartMotorBase):
             self._motor.stop()
 
         self._motor.reset()
-        print('found min position')
+        logger.info('{} - found min position'.format(self._name))
         self._min_position = 0
 
         # determine full circle rotation length
@@ -216,7 +217,7 @@ class ColorSensorMotor(SmartMotorBase):
 
             self._motor.stop()
 
-        print('found max position')
+        logger.info('{} - found max position'.format(self._name))
         self._max_position = self._motor.position
 
         if to_center:
@@ -302,3 +303,12 @@ class TouchSensorMotorSet(MotorSetBase):
                 else:
                     # don't wait for completion if not last motor in set
                     motor.on_to_position(self._speed, self.center_position, True, False)
+        else:
+            # @TODO testing issue when to_center=False
+            for motor in self._motor:
+                if motor == self._motor[-1]:
+                    # wait on motor completion if last motor in set
+                    motor.on_to_position(self._speed, 0, True, True)
+                else:
+                    # don't wait for completion if not last motor in set
+                    motor.on_to_position(self._speed, 0, True, False)
