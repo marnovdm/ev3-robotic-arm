@@ -76,13 +76,13 @@ class LimitedRangeMotor(SmartMotorBase):
 
     def calibrate(self, to_center=True):
         super().calibrate(to_center)
-        self._motor.on(self._speed, False)
+        self._motor.on(self._speed, True, False)
 
         self._motor.wait_until('stalled')
         self._motor.reset()  # sets 0 point
         self._min_position = self._motor.position + self._padding
 
-        self._motor.on(-self._speed, False)
+        self._motor.on(-self._speed, True, False)
         self._motor.wait_until('stalled')
 
         self._motor.stop()
@@ -136,7 +136,7 @@ class MotorSetBase(SmartMotorBase):
 
     @property
     def is_running(self):
-        return self._motor[0].is_running
+        return any((motor.is_running for motor in self._motor))
 
     @property
     def current_position(self):
@@ -152,7 +152,7 @@ class LimitedRangeMotorSet(MotorSetBase):
     def calibrate(self, to_center=True):
         super().calibrate(to_center)
         for motor in self._motor:
-            motor.on(self._speed, False)
+            motor.on(self._speed, True, False)
 
         self._motor[1].wait_until('stalled')
         for motor in self._motor:
@@ -161,7 +161,7 @@ class LimitedRangeMotorSet(MotorSetBase):
         self._min_position = self._motor[1].position + self._padding
 
         for motor in self._motor:
-            motor.on(-self._speed, False)
+            motor.on(-self._speed, True, False)
 
         self._motor[1].wait_until('stalled')
         for motor in self._motor:
@@ -194,7 +194,7 @@ class ColorSensorMotor(SmartMotorBase):
     def calibrate(self, to_center=True):
         super().calibrate(to_center)
         if self._sensor.color != self._color:
-            self._motor.on(self._speed, False)
+            self._motor.on(self._speed, True, False)
             while self._sensor.color != self._color:
                 time.sleep(0.1)
 
@@ -206,7 +206,7 @@ class ColorSensorMotor(SmartMotorBase):
 
         # determine full circle rotation length
         while self._sensor.color == self._color:
-            self._motor.on(self._speed, False)
+            self._motor.on(self._speed, True, False)
             time.sleep(0.1)
 
         # wait to go full circle
@@ -222,6 +222,28 @@ class ColorSensorMotor(SmartMotorBase):
 
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
+
+
+    def to_position(self, position_perc, speed=None, brake=True, wait=True):
+        """ 
+        custom to_position implementation to determine shortest path to use
+        for base
+        """
+        if not speed:
+            speed = self._speed
+
+        target_position = self.perc_to_position(position_perc)
+        logger.info('Moving {} to {}% (current: {}, target: {})'.format(self._name, position_perc, self.current_position, target_position))
+        
+        if self.current_position - target_position > self.center_position:
+            target_position = self.max_position + target_position
+            logger.info('Adjusting target position to {} to force shortest path'.format(target_position))
+        
+        self._motor.on_to_position(speed, target_position, brake, wait)
+        
+        # set theoretical position after shortest path adjustment
+        self._motor.position = self.perc_to_position(position_perc)
+
 
 
 class TouchSensorMotor(SmartMotorBase):
@@ -240,17 +262,22 @@ class TouchSensorMotor(SmartMotorBase):
         self._min_position = 0
         super().__init__(motor, name, speed, padding, inverted, debug)
 
-    def calibrate(self, to_center=True):
+    def calibrate(self, to_center=True, timeout=30000):
         super().calibrate(to_center)
         if not self._sensor.is_pressed:
-            self._motor.on(self._speed, False)
-            self._sensor.wait_for_pressed()
+            self._motor.on_for_seconds(self._speed, timeout, True, False)
+            if not self._sensor.wait_for_pressed(timeout):
+                self._motor.stop()
+                raise
+
             self._motor.stop()
 
         # make sure we're not pressing the button anymore before setting min position
         if self._sensor.is_pressed:
-            self._motor.on(-self._speed, False)
-            self._sensor.wait_for_released()
+            self._motor.on_for_seconds(-self._speed, timeout, True, False)
+            if not self._sensor.wait_for_released(timeout):
+                self._motor.stop()
+                raise
 
         self._motor.reset()
 
@@ -275,9 +302,9 @@ class TouchSensorMotorSet(MotorSetBase):
         if not self._sensor.is_pressed:
             for motor in self._motor:
                 if self._inverted:
-                    motor.on(-self._speed, False)
+                    motor.on(-self._speed, True, False)
                 else:
-                    motor.on(self._speed, False)
+                    motor.on(self._speed, True, False)
 
             self._sensor.wait_for_pressed()
             for motor in self._motor:
@@ -286,9 +313,9 @@ class TouchSensorMotorSet(MotorSetBase):
         if self._sensor.is_pressed:
             for motor in self._motor:
                 if self._inverted:
-                    motor.on(self._speed, False)
+                    motor.on(self._speed, True, False)
                 else:
-                    motor.on(-self._speed, False)
+                    motor.on(-self._speed, True, False)
 
             self._sensor.wait_for_released()
 

@@ -20,6 +20,7 @@
 __author__ = 'Nino Guba'
 
 import logging
+import csv
 import os
 import sys
 import time
@@ -33,9 +34,9 @@ from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor
 from ev3dev2.power import PowerSupply
 from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor, TouchSensor
-from evdev import InputDevice
+# from evdev import InputDevice
 
-from math_helper import scale_stick
+# from math_helper import scale_stick
 from smart_motor import (ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
                          TouchSensorMotor, TouchSensorMotorSet)
 
@@ -145,6 +146,7 @@ logger.info("Elbow touch sensor detected!")
 roll_touch = remote_sensor_lego.TouchSensor(remote_sensor.INPUT_1)
 logger.info("Roll touch sensor detected!")
 
+
 def motors_to_center():
     """ move all motors to their default position """
 
@@ -165,10 +167,10 @@ def motors_to_center():
 
 # Motors
 waist_motor = ColorSensorMotor(LargeMotor(
-    OUTPUT_A), speed=SLOW_SPEED, name='waist', sensor=color_sensor, color=5)  # 5 = red
+    OUTPUT_A), speed=NORMAL_SPEED, name='waist', sensor=color_sensor, color=5)  # 5 = red
 shoulder_motors = TouchSensorMotorSet(
     [LargeMotor(OUTPUT_B), LargeMotor(OUTPUT_C)], speed=30, name='shoulder', sensor=shoulder_touch, max_position=-1000)
-elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-850)
+elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-800)
 
 # Secondary EV3
 # Motors
@@ -209,7 +211,7 @@ def calibrate_motors():
     logger.debug(elbow_motor)
 
     # roll first, because otherwise we might not be able to move elbow all the way
-    roll_motor.calibrate()
+    roll_motor.calibrate(timeout=5000)
     logger.debug(roll_motor)
 
     # shoulder_motors.to_position(50, wait=False)
@@ -308,14 +310,46 @@ signal(SIGINT, clean_shutdown)
 log_power_info()
 calibrate_motors()
 
+# contains only calibrated motors for now
+motors = {
+    'waist': waist_motor, 
+    'shoulder': shoulder_motors, 
+    'elbow': elbow_motor, 
+    'roll': roll_motor, 
+    # 'pitch': pitch_motor, 
+    # 'spin': spin_motor, 
+    # 'grabber': grabber_motor,
+}
+
 
 def moves_from_file(command_file):
-    with open(command_file, 'r') as commands:
-        for command in commands.readlines():
-            # CSV format:
-            # timing,waist,shoulder,elbow,roll,pitch,spin,grab
-            logger.info(command.rstrip().split(','))
+    logger.info('Reading moves from {}...'.format(command_file))
+    with open(command_file, newline='') as csv_file:
+        csv_reader = csv.DictReader(csv_file)
+        for row in csv_reader:
 
+            for motor, position in row.items():
+                if motor in motors:
+                    #  and motors[motor].current_position != position:
+                    try:
+                        motors[motor].to_position(int(position), wait=False)
+                    except ValueError:
+                        logger.debug('Skipping invalid motor position: {}'.format(position))
+                        break
+            
+            # testing...
+            # time.sleep(1)
+            # for motor in motors:
+            #     print('Motor {} is running: {}'.format(motor._name, motor.is_running))
+            while any((motor.is_running for name, motor in motors.items())):
+                for name, motor in motors.items():
+                    if motor.is_running:
+                        logger.info('Waiting for {}...'.format(name))
+                time.sleep(0.5)
+
+            # while any((motor.is_running for name, motor in motors.items())):
+            #     time.sleep(0.5)
+            
 
 def demo_moves():
     """ helper method to show some demo moves for robot arm """
@@ -356,6 +390,7 @@ def demo_moves():
     roll_motor.to_position(0)
     waist_motor.to_position(0)
 
+
 moves_from_file('commands.csv')
-demo_moves()
+# demo_moves()
 clean_shutdown()
