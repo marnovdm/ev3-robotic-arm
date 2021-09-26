@@ -49,14 +49,14 @@ class SmartMotorBase:
         if not speed:
             speed = self._speed
 
-        print('Moving motor to {}'.format(self.perc_to_position(position_perc)))
+        print('Moving motor {} to {}% (position: {})'.format(self._name, position_perc, self.perc_to_position(position_perc)))
         self._motor.on_to_position(speed, self.perc_to_position(position_perc), brake, wait)
 
     def __getattr__(self, name):
         return getattr(self._motor, name)
 
     def __str__(self):
-        return "Motor: {}, min: {}, center: {}, max: {}, current: {}".format(self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
+        return "Motor: {}, device: {}, min: {}, center: {}, max: {}, current: {}".format(self._name, self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
 
 
 class StaticRangeMotor(SmartMotorBase):
@@ -109,7 +109,8 @@ class MotorSetBase(SmartMotorBase):
             speed = self._speed
 
         for motor in self._motor:
-            print('Moving MotorSet to {}'.format(self.perc_to_position(position_perc)))
+            # print('Moving MotorSet {} to {}'.format(self._name, self.perc_to_position(position_perc)))
+            print('Moving MotorSet {} to {}% (position: {})'.format(self._name, position_perc, self.perc_to_position(position_perc)))
             if motor == self._motor[-1]:
                 # if last motor in this set, honor wait variable
                 motor.on_to_position(speed, self.perc_to_position(position_perc), brake, wait)
@@ -141,7 +142,7 @@ class MotorSetBase(SmartMotorBase):
         return self._motor[0].position
 
     def __str__(self):
-        return "Motor: {}, min: {}, center: {}, max: {}, current: {}".format(self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
+        return "Motor {}: devices: {}, min: {}, center: {}, max: {}, current: {}".format(self._name, self._motor, self.min_position, self.center_position, self.max_position, self.current_position)
 
 
 class LimitedRangeMotorSet(MotorSetBase):

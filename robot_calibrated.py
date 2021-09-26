@@ -52,8 +52,8 @@ VERY_SLOW_SPEED = 10
 
 # Setup logging
 os.system('setfont Lat7-Terminus12x6')
-logging.basicConfig(level=logging.INFO, stream=sys.stdout,
-                    format='%(message)s')
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout,
+                    format='%(asctime)s %(levelname)-8s %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -84,6 +84,8 @@ conn = rpyc.classic.connect(REMOTE_HOST)
 remote_power_mod = conn.modules['ev3dev2.power']
 remote_motor = conn.modules['ev3dev2.motor']
 remote_led = conn.modules['ev3dev2.led']
+remote_sensor = conn.modules['ev3dev2.sensor']
+remote_sensor_lego = conn.modules['ev3dev2.sensor.lego']
 logger.info("RPyC started succesfully")
 
 # Gamepad
@@ -137,6 +139,8 @@ logger.info("Shoulder touch sensor detected!")
 elbow_touch = TouchSensor(INPUT_4)
 logger.info("Elbow touch sensor detected!")
 
+roll_touch = remote_sensor_lego.TouchSensor(remote_sensor.INPUT_1)
+logger.info("Roll touch sensor detected!")
 
 def motors_to_center():
     """ move all motors to their default position """
@@ -165,8 +169,10 @@ elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sen
 
 # Secondary EV3
 # Motors
-roll_motor = LimitedRangeMotor(remote_motor.MediumMotor(
-    remote_motor.OUTPUT_A), speed=30, name='roll')
+# roll_motor = LimitedRangeMotor(remote_motor.MediumMotor(
+#     remote_motor.OUTPUT_A), speed=30, name='roll')
+roll_motor = TouchSensorMotor(remote_motor.MediumMotor(
+    remote_motor.OUTPUT_A), speed=30, name='roll', sensor=roll_touch, max_position=-1000)
 pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_B), speed=10, name='pitch')
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
@@ -174,6 +180,10 @@ spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
    remote_motor.OUTPUT_C), max_position=14 * 360, speed=20, name='spin')
 # spin_motor = LimitedRangeMotor(remote_motor.MediumMotor(
 #    remote_motor.OUTPUT_C), speed=20, name='spin')
+# spin_motor = TouchSensorMotor(remote_motor.MediumMotor(
+#     remote_motor.OUTPUT_C), speed=20, name='spin', sensor=spin_touch, max_position=500)
+
+# [grab][spin][pitch][roll][elbow][shoulder][waist]
 
 try:
     grabber_motor = LimitedRangeMotor(
@@ -194,12 +204,15 @@ def calibrate_motors():
     shoulder_motors.calibrate()
     print(shoulder_motors)
 
-    elbow_motor.calibrate()
+    elbow_motor.calibrate(to_center=False)
     print(elbow_motor)
 
-    # not strong enough yet
-    # roll_motor.calibrate()
-    # print(roll_motor)
+    # roll first, because otherwise we might not be able to move elbow all the way
+    roll_motor.calibrate()
+    print(roll_motor)
+
+    # shoulder_motors.to_position(50, wait=False)
+    elbow_motor.to_position(50)
 
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
@@ -251,9 +264,12 @@ def log_power_info():
 def clean_shutdown(signal_received=None, frame=None):
     """ make sure all motors are stopped when stopping this script """
     logger.info('Shutting down...')
-
+        
     global running
     running = False
+
+    # This seems to help?!
+    reset_motors()
 
     logger.info('waist..')
     waist_motor.stop()
@@ -261,14 +277,15 @@ def clean_shutdown(signal_received=None, frame=None):
     shoulder_motors.stop()
     logger.info('elbow..')
     elbow_motor.stop()
-    logger.info('pitch..')
-    # For some reason the pitch motor sometimes gets stuck here, and a reset helps?
-    # pitch_motor.reset()
-    pitch_motor.stop()
     logger.info('roll..')
+    roll_motor.reset()
     roll_motor.stop()
     logger.info('spin..')
     spin_motor.stop()
+    logger.info('pitch..')
+    # For some reason the pitch motor sometimes gets stuck here, and a reset helps?
+    pitch_motor.reset()
+    pitch_motor.stop()
 
     if grabber_motor:
         logger.info('grabber..')
@@ -291,6 +308,12 @@ log_power_info()
 calibrate_motors()
 
 
+def moves_from_file(command_file):
+    with open(command_file, 'r') as commands:
+        for command in commands.readlines():
+            print(command.rstrip().split(','))
+
+
 def demo_moves():
     """ helper method to show some demo moves for robot arm """
     shoulder_motors.to_position(50)
@@ -310,5 +333,6 @@ def demo_moves():
     elbow_motor.to_position(100)
     time.sleep(2)
 
+moves_from_file('commands.csv')
 demo_moves()
 clean_shutdown()
