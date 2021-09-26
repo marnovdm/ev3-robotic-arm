@@ -224,7 +224,7 @@ class ColorSensorMotor(SmartMotorBase):
             self._motor.on_to_position(self._speed, self.center_position, True, True)
 
 
-    def to_position(self, position_perc, speed=None, brake=True, wait=True):
+    def _TODO_to_position(self, position_perc, speed=None, brake=True, wait=True):
         """ 
         custom to_position implementation to determine shortest path to use
         for base
@@ -242,8 +242,11 @@ class ColorSensorMotor(SmartMotorBase):
         self._motor.on_to_position(speed, target_position, brake, wait)
         
         # set theoretical position after shortest path adjustment
-        self._motor.position = self.perc_to_position(position_perc)
-
+        if target_position != self.perc_to_position(position_perc):
+            logger.debug('Waiting for shortest path relative position adjustment...')
+            self._motor.wait_until_not_moving()
+            self._motor.position = self.perc_to_position(position_perc)
+            logger.debug('Shortest path adjustment complete')
 
 
 class TouchSensorMotor(SmartMotorBase):

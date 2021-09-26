@@ -334,8 +334,8 @@ def moves_from_file(command_file):
                     try:
                         motors[motor].to_position(int(position), wait=False)
                     except ValueError:
-                        logger.debug('Skipping invalid motor position: {}'.format(position))
-                        break
+                        raise
+                        # logger.debug('Skipping invalid motor position: {}'.format(position))
             
             # testing...
             # time.sleep(1)
@@ -349,48 +349,9 @@ def moves_from_file(command_file):
 
             # while any((motor.is_running for name, motor in motors.items())):
             #     time.sleep(0.5)
-            
-
-def demo_moves():
-    """ helper method to show some demo moves for robot arm """
-    
-    shoulder_motors.to_position(50)
-    time.sleep(2)
-    waist_motor.to_position(75, wait=False)
-    roll_motor.to_position(20, wait=False)
-    elbow_motor.to_position(0)
-    time.sleep(2)
-    elbow_motor.to_position(100)
-    time.sleep(2)
-    elbow_motor.to_position(50)
-    time.sleep(2)
-    waist_motor.to_position(25, wait=False)
-    shoulder_motors.to_position(0)
-    time.sleep(2)
-    shoulder_motors.to_position(100)
-    time.sleep(2)
-    elbow_motor.to_position(100)
-    time.sleep(2)
-
-    shoulder_motors.to_position(25, wait=False)
-    elbow_motor.to_position(25, wait=False)
-    roll_motor.to_position(80, wait=False)
-    waist_motor.to_position(0)
-    time.sleep(2)
-    
-    shoulder_motors.to_position(75, wait=False)
-    elbow_motor.to_position(75, wait=False)
-    roll_motor.to_position(20, wait=False)
-    waist_motor.to_position(25)
-    time.sleep(2)
-
-    # to default pos
-    shoulder_motors.to_position(0)
-    elbow_motor.to_position(0)
-    roll_motor.to_position(0)
-    waist_motor.to_position(0)
 
 
 moves_from_file('commands.csv')
-# demo_moves()
+
+# moves_from_file('waist.csv')
 clean_shutdown()
