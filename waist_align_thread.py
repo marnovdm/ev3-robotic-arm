@@ -25,9 +25,9 @@ class WaistAlignThread(threading.Thread):
 
     def run(self):
         self.logger.info("WaistAlignThread running!")
-        while self.state.running:
-            if self.state.waist_target_color != 0 and not self.state.aligning_waist:
-                self._align_waist_to_color(self.state.waist_target_color)
+        while self.state['running']:
+            if self.state['waist_target_color'] != 0 and not self.state['aligning_waist']:
+                self._align_waist_to_color(self.state['waist_target_color'])
             time.sleep(2)  # prevent performance impact, drawback is you need to hold the button for a bit before it registers
 
         self.logger.info("WaistAlignThread stopping!")
@@ -44,7 +44,7 @@ class WaistAlignThread(threading.Thread):
 
         # Set a flag for the MotorThread to prevent stopping the waist motor while
         # we're trying to align it
-        self.state.aligning_waist = True
+        self.state['aligning_waist'] = True
 
         # If we're not on the correct color, start moving but make sure there's a
         # timeout to prevent trying forever.
@@ -70,4 +70,4 @@ class WaistAlignThread(threading.Thread):
             self.waist_motor.stop()
 
         # update flag for MotorThead so waist control works again.
-        self.state.aligning_waist = False
+        self.state['aligning_waist'] = False

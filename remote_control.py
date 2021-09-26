@@ -35,13 +35,11 @@ from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor, MoveTank
 from ev3dev2.power import PowerSupply
 
-# from ev3dev2.sound import Sound
 from evdev import InputDevice
 
 from math_helper import scale_stick
 from motor_thread import MotorThread
 from waist_align_thread import WaistAlignThread
-
 
 # Config
 REMOTE_HOST = '10.42.0.3'
@@ -52,19 +50,6 @@ os.system('setfont Lat7-Terminus12x6')
 logging.basicConfig(level=logging.INFO, stream=sys.stdout,
                     format='%(message)s')
 logger = logging.getLogger(__name__)
-
-
-def reset_motors():
-    """ reset motor positions to default """
-    logger.info("Resetting motors...")
-    waist_motor.reset()
-    shoulder_motors.reset()
-    elbow_motor.reset()
-    roll_motor.reset()
-    pitch_motor.reset()
-    spin_motor.reset()
-    if grabber_motor:
-        grabber_motor.reset()
 
 
 # Initial setup
@@ -158,9 +143,6 @@ devices = {
     'remote_leds': remote_leds,
 }
 
-# Not sure why but resetting all motors before doing anything else seems to improve reliability
-reset_motors()
-
 state = {
     'shoulder_speed': 0, 
     'elbow_speed': 0, 
@@ -179,6 +161,19 @@ state = {
     'waist_target_color': 0, 
     'aligning_waist': False
 }
+
+
+def reset_motors():
+    """ reset motor positions to default """
+    logger.info("Resetting motors...")
+    waist_motor.reset()
+    shoulder_motors.reset()
+    elbow_motor.reset()
+    roll_motor.reset()
+    pitch_motor.reset()
+    spin_motor.reset()
+    if grabber_motor:
+        grabber_motor.reset()
 
 
 def log_power_info():
@@ -223,17 +218,19 @@ def clean_shutdown(signal_received=None, frame=None):
 # Ensure clean shutdown on CTRL+C
 signal(SIGINT, clean_shutdown)
 
+# Not sure why but resetting all motors before doing anything else seems to improve reliability
+reset_motors()
+
 log_power_info()
 
-
 # Main motor control thread
-motor_thread = MotorThread(devices, state)
+motor_thread = MotorThread(logger=logger, devices=devices, state=state)
 motor_thread.setDaemon(True)
 motor_thread.start()
 
 # We only need the WaistAlignThread if we detected a color sensor
 if color_sensor:
-    waist_align_thread = WaistAlignThread(devices, state)
+    waist_align_thread = WaistAlignThread(logger=logger, devices=devices, state=state)
     waist_align_thread.setDaemon(True)
     waist_align_thread.start()
 
@@ -241,85 +238,85 @@ if color_sensor:
 for event in gamepad.read_loop():  # this loops infinitely
     if event.type == 3:  # stick input
         if event.code == 0:  # Left stick X-axis
-            state.shoulder_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE, invert=True)
+            state['shoulder_speed'] = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE, invert=True)
         elif event.code == 3:  # Right stick X-axis
-            state.elbow_speed = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE)
+            state['elbow_speed'] = scale_stick(event.value, deadzone=JOYSTICK_DEADZONE)
         elif event.code == 17:  # dpad up/down
-            state.speed_modifier = event.value
+            state['speed_modifier'] = event.value
         elif event.code == 16:  # dpad left/right
-            state.waist_target_color = event.value
+            state['waist_target_color'] = event.value
 
     elif event.type == 1:  # button input
 
         if event.code == 310:  # L1
             if event.value == 1:
-                state.waist_right = False
-                state.waist_left = True
+                state['waist_right'] = False
+                state['waist_left'] = True
             elif event.value == 0:
-                state.waist_left = False
+                state['waist_left'] = False
 
         elif event.code == 311:  # R1
             if event.value == 1:
-                state.waist_left = False
-                state.waist_right = True
+                state['waist_left'] = False
+                state['waist_right'] = True
             elif event.value == 0:
-                state.waist_right = False
+                state['waist_right'] = False
 
         elif event.code == 308:  # Square
             if event.value == 1:
-                state.roll_right = False
-                state.roll_left = True
+                state['roll_right'] = False
+                state['roll_left'] = True
             elif event.value == 0:
-                state.roll_left = False
+                state['roll_left'] = False
 
         elif event.code == 305:  # Circle
             if event.value == 1:
-                state.roll_left = False
-                state.roll_right = True
+                state['roll_left'] = False
+                state['roll_right'] = True
             elif event.value == 0:
-                state.roll_right = False
+                state['roll_right'] = False
 
         elif event.code == 307:  # Triangle
             if event.value == 1:
-                state.pitch_down = False
-                state.pitch_up = True
+                state['pitch_down'] = False
+                state['pitch_up'] = True
             elif event.value == 0:
-                state.pitch_up = False
+                state['pitch_up'] = False
 
         elif event.code == 304:  # X
             if event.value == 1:
-                state.pitch_up = False
-                state.pitch_down = True
+                state['pitch_up'] = False
+                state['pitch_down'] = True
             elif event.value == 0:
-                state.pitch_down = False
+                state['pitch_down'] = False
 
         elif event.code == 312:  # L2
             if event.value == 1:
-                state.spin_right = False
-                state.spin_left = True
+                state['spin_right'] = False
+                state['spin_left'] = True
             elif event.value == 0:
-                state.spin_left = False
+                state['spin_left'] = False
 
         elif event.code == 313:  # R2
             if event.value == 1:
-                state.spin_left = False
-                state.spin_right = True
+                state['spin_left'] = False
+                state['spin_right'] = True
             elif event.value == 0:
-                state.spin_right = False
+                state['spin_right'] = False
 
         elif event.code == 317:  # L3
             if event.value == 1:
-                state.grabber_close = False
-                state.grabber_open = True
+                state['grabber_close'] = False
+                state['grabber_open'] = True
             elif event.value == 0:
-                state.grabber_open = False
+                state['grabber_open'] = False
 
         elif event.code == 318:  # R3
             if event.value == 1:
-                state.grabber_open = False
-                state.grabber_close = True
+                state['grabber_open'] = False
+                state['grabber_close'] = True
             elif event.value == 0:
-                state.grabber_close = False
+                state['grabber_close'] = False
 
         elif event.code == 314 and event.value == 1:  # Share
             # debug info
@@ -333,7 +330,7 @@ for event in gamepad.read_loop():  # this loops infinitely
 
         elif event.code == 316 and event.value == 1:  # PS
             # stop control loop
-            state.running = False
+            state['running'] = False
 
             # Move motors to default position
             # motors_to_center()

@@ -248,15 +248,6 @@ def log_power_info():
     logger.info('Remote battery power: {}V / {}A'.format(round(remote_power.measured_volts, 2), round(remote_power.measured_amps, 2)))
 
 
-def calculate_speed(speed, max=100):
-    if speed_modifier == 0:
-        return min(speed, max)
-    elif speed_modifier == -1:  # dpad up
-        return min(speed * 1.5, max)
-    elif speed_modifier == 1:  # dpad down
-        return min(speed / 1.5, max)
-
-
 def clean_shutdown(signal_received=None, frame=None):
     """ make sure all motors are stopped when stopping this script """
     logger.info('Shutting down...')

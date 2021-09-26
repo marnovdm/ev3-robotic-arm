@@ -22,11 +22,11 @@ class MotorThread(threading.Thread):
         self.state = state
 
     def _calculate_speed(self, speed, max=100):
-        if self.state.speed_modifier == 0:
+        if self.state['speed_modifier'] == 0:
             return min(speed, max)
-        elif self.state.speed_modifier == -1:  # dpad up
+        elif self.state['speed_modifier'] == -1:  # dpad up
             return min(speed * 1.5, max)
-        elif self.state.speed_modifier == 1:  # dpad down
+        elif self.state['speed_modifier'] == 1:  # dpad down
             return min(speed / 1.5, max)
 
     def run(self):
@@ -43,32 +43,32 @@ class MotorThread(threading.Thread):
         self.remote_leds.set_color("RIGHT", "GREEN")
 
         self.logger.info("Starting main loop...")
-        while self.state.running:
+        while self.state['running']:
             # Proportional control
-            if self.state.shoulder_speed != 0:
-                self.shoulder_motors.on(self.state.shoulder_speed, self.state.shoulder_speed)
+            if self.state['shoulder_speed'] != 0:
+                self.shoulder_motors.on(self.state['shoulder_speed'], self.state['shoulder_speed'])
             elif self.shoulder_motors.is_running:
                 self.shoulder_motors.stop()
 
             # Proportional control
-            if self.state.elbow_speed != 0:
-                self.elbow_motor.on(self.state.elbow_speed)
+            if self.state['elbow_speed'] != 0:
+                self.elbow_motor.on(self.state['elbow_speed'])
             elif self.elbow_motor.is_running:
                 self.elbow_motor.stop()
 
             # on/off control
-            if not self.state.aligning_waist:
-                if self.state.waist_left:
+            if not self.state['aligning_waist']:
+                if self.state['waist_left']:
                     self.waist_motor.on(self._calculate_speed(-self.SLOW_SPEED))
-                elif self.state.waist_right:
+                elif self.state['waist_right']:
                     self.waist_motor.on(self._calculate_speed(self.SLOW_SPEED))
                 elif self.waist_motor.is_running:
                     self.waist_motor.stop()
 
             # on/off control
-            if self.state.roll_left:
+            if self.state['roll_left']:
                 self.roll_motor.on(self._calculate_speed(-self.SLOW_SPEED))
-            elif self.state.roll_right:
+            elif self.state['roll_right']:
                 self.roll_motor.on(self._calculate_speed(self.SLOW_SPEED))
             elif self.roll_motor.is_running:
                 self.roll_motor.stop()
@@ -77,9 +77,9 @@ class MotorThread(threading.Thread):
             #
             # Pitch affects grabber as well, but to a lesser degree. We could improve this
             # in the future to adjust grabber based on pitch movement as well.
-            if self.state.pitch_up:
+            if self.state['pitch_up']:
                 self.pitch_motor.on(self._calculate_speed(self.VERY_SLOW_SPEED))
-            elif self.state.pitch_down:
+            elif self.state['pitch_down']:
                 self.pitch_motor.on(self._calculate_speed(-self.VERY_SLOW_SPEED))
             elif self.pitch_motor.is_running:
                 self.pitch_motor.stop()
@@ -100,7 +100,7 @@ class MotorThread(threading.Thread):
             # think when using regular gears the 7 ratio should be sufficient.
             # NOTE: Yes, with regular gears the calculated ratio is correct!
             GRABBER_SPIN_RATIO = 7
-            if self.state.spin_left:
+            if self.state['spin_left']:
                 spin_motor_speed = self._calculate_speed(-self.SLOW_SPEED)
                 self.spin_motor.on(spin_motor_speed)
                 if self.grabber_motor:
@@ -108,7 +108,7 @@ class MotorThread(threading.Thread):
                     grabber_spin_sync_speed = (spin_motor_speed / GRABBER_SPIN_RATIO) * -1
                     self.grabber_motor.on(grabber_spin_sync_speed, False)
                     # logger.info('Spin motor {}, grabber {}'.format(spin_motor_speed, grabber_spin_sync_speed))
-            elif self.state.spin_right:
+            elif self.state['spin_right']:
                 spin_motor_speed = self._calculate_speed(self.SLOW_SPEED)
                 self.spin_motor.on(spin_motor_speed)
                 if self.grabber_motor:
@@ -123,9 +123,9 @@ class MotorThread(threading.Thread):
 
             # on/off control - can only control this directly if we're not currently spinning
             elif self.grabber_motor:
-                if self.state.grabber_open:
+                if self.state['grabber_open']:
                     self.grabber_motor.on(self._calculate_speed(self.NORMAL_SPEED), False)
-                elif self.state.grabber_close:
+                elif self.state['grabber_close']:
                     self.grabber_motor.on(self._calculate_speed(-self.NORMAL_SPEED), False)
                 elif self.grabber_motor.is_running:
                     self.grabber_motor.stop()
