@@ -89,21 +89,6 @@ remote_sensor = conn.modules['ev3dev2.sensor']
 remote_sensor_lego = conn.modules['ev3dev2.sensor.lego']
 logger.info("RPyC started succesfully")
 
-# Gamepad
-# If bluetooth is not available, check https://github.com/ev3dev/ev3dev/issues/1314
-"""
-try:
-    logger.info("Connecting wireless controller...")
-    gamepad = InputDevice(evdev.list_devices()[0])
-    if gamepad.name != 'Wireless Controller':
-        raise DeviceNotFound
-except DeviceNotFound:
-    gamepad = False
-    logger.info("Wireless controller not found - running without it")
-
-logger.info("Wireless controller connected!")
-"""
-
 # LEDs
 leds = Leds()
 remote_leds = remote_led.Leds()
@@ -190,7 +175,7 @@ spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
 
 try:
     grabber_motor = LimitedRangeMotor(
-        remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=20, name='grabber')
+        remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=10, name='grabber')
     grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
     logger.info("Grabber motor detected!")
 except DeviceNotFound:
@@ -223,10 +208,12 @@ def calibrate_motors():
     logger.debug(waist_motor)
 
     # not strong enough yet :(
-    # pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
-    # print(pitch_motor)
-    # if grabber_motor:
-    #     grabber_motor.calibrate(to_center=False)
+    pitch_motor.calibrate(timeout=5000)  # needs to be more robust, gear slips now instead of stalling the motor
+    logger.debug(pitch_motor)
+
+    if grabber_motor:
+        grabber_motor.calibrate(to_center=False, timeout=5000)
+        logger.debug(grabber_motor)
 
     # roll & spin motor are still missing here - spin motor can move indefinitely though
 
@@ -329,13 +316,18 @@ def moves_from_file(command_file):
         for row in csv_reader:
 
             for motor, position in row.items():
+                if position == None:
+                    logger.debug('Skip invalid position {} for motor {}'.format(position, motor))
+                    continue
+
+                try:
+                    int(position)
+                except ValueError:
+                    logger.debug('Skip invalid row, got position {} for motor {}'.format(position, motor))
+                    break
+
                 if motor in motors:
-                    #  and motors[motor].current_position != position:
-                    try:
-                        motors[motor].to_position(int(position), wait=False)
-                    except ValueError:
-                        raise
-                        # logger.debug('Skipping invalid motor position: {}'.format(position))
+                    motors[motor].to_position(int(position), wait=False)
             
             # testing...
             # time.sleep(1)

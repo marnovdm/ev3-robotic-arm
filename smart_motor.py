@@ -73,20 +73,42 @@ class StaticRangeMotor(SmartMotorBase):
 
 class LimitedRangeMotor(SmartMotorBase):
     """ handle motors with a limited range of valid movements, using stall detection to determine usable range """
+    
+    def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, max_position=None):
+        self._max_position = max_position
+        self._min_position = 0
+        super().__init__(motor, name, speed, padding, inverted, debug)
 
-    def calibrate(self, to_center=True):
+    def calibrate(self, to_center=True, timeout=30000):
         super().calibrate(to_center)
         self._motor.on(self._speed, True, False)
 
-        self._motor.wait_until('stalled')
+        def _check_motor_state(state):
+            logger.debug(state)
+            if 'overloaded' in state or 'stalled' in state:
+                return True
+
+            return False
+
+        # self._motor.wait_until('stalled')
+        if not self._motor.wait(_check_motor_state, timeout):
+            self._motor.stop()
+            raise
+
         self._motor.reset()  # sets 0 point
         self._min_position = self._motor.position + self._padding
+        
+        if not self._max_position:
+            logger.debug('Finding max position for {}...'.format(self._name))
+            self._motor.on(-self._speed, True, False)
+            if not self._motor.wait(_check_motor_state, timeout):
+                self._motor.stop()
+                raise
+            
+            # self._motor.wait_until('stalled')
 
-        self._motor.on(-self._speed, True, False)
-        self._motor.wait_until('stalled')
-
-        self._motor.stop()
-        self._max_position = self._motor.position - self._padding
+            self._motor.stop()
+            self._max_position = self._motor.position - self._padding
 
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
@@ -224,7 +246,7 @@ class ColorSensorMotor(SmartMotorBase):
             self._motor.on_to_position(self._speed, self.center_position, True, True)
 
 
-    def _TODO_to_position(self, position_perc, speed=None, brake=True, wait=True):
+    def to_position(self, position_perc, speed=None, brake=True, wait=True):
         """ 
         custom to_position implementation to determine shortest path to use
         for base
@@ -237,14 +259,21 @@ class ColorSensorMotor(SmartMotorBase):
         
         if self.current_position - target_position > self.center_position:
             target_position = self.max_position + target_position
-            logger.info('Adjusting target position to {} to force shortest path'.format(target_position))
+            logger.info('1 - Adjusting target position to {} to force shortest path'.format(target_position))
+        elif self.current_position - target_position < -self.center_position:
+            target_position = (self.max_position - target_position) * -1
+            logger.info('2 - Adjusting target position to {} to force shortest path'.format(target_position))
+
+        if target_position != self.perc_to_position(position_perc) and wait is not True:
+            logger.info('Forcing wait=True for movement due to adjusted target position')
+            wait = True
         
         self._motor.on_to_position(speed, target_position, brake, wait)
         
         # set theoretical position after shortest path adjustment
         if target_position != self.perc_to_position(position_perc):
-            logger.debug('Waiting for shortest path relative position adjustment...')
-            self._motor.wait_until_not_moving()
+            # logger.debug('Waiting for shortest path relative position adjustment...')
+            # self._motor.wait_until_not_moving()
             self._motor.position = self.perc_to_position(position_perc)
             logger.debug('Shortest path adjustment complete')
 
