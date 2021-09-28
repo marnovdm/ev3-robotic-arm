@@ -1,5 +1,6 @@
 import threading
 
+
 class MotorThread(threading.Thread):
     devices = None
     state = None

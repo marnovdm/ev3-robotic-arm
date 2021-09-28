@@ -7,7 +7,7 @@ class WaistAlignThread(threading.Thread):
     devices = None
     state = None
     logger = None
-    
+
     # Define speeds
     FULL_SPEED = 100
     FAST_SPEED = 75
@@ -20,7 +20,7 @@ class WaistAlignThread(threading.Thread):
         self.logger = logger
         for key in devices:
             setattr(self, key, devices[key])
-    
+
         self.state = state
 
     def run(self):

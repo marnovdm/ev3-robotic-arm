@@ -7,6 +7,7 @@ logger = logging.getLogger('robot_calibrated')
 class CalibrationError(Exception):
     pass
 
+
 class SmartMotorBase:
     """ base class for handling motors """
     _motor = None
@@ -77,7 +78,7 @@ class StaticRangeMotor(SmartMotorBase):
 
 class LimitedRangeMotor(SmartMotorBase):
     """ handle motors with a limited range of valid movements, using stall detection to determine usable range """
-    
+
     def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, max_position=None):
         self._max_position = max_position
         self._min_position = 0
@@ -101,14 +102,14 @@ class LimitedRangeMotor(SmartMotorBase):
 
         self._motor.reset()  # sets 0 point
         self._min_position = self._motor.position + self._padding
-        
+
         if not self._max_position:
             logger.debug('Finding max position for {}...'.format(self._name))
             self._motor.on(-self._speed, True, False)
             if not self._motor.wait(_check_motor_state, timeout):
                 self._motor.stop()
                 raise CalibrationError('reached timeout while calibrating')
-            
+
             # self._motor.wait_until('stalled')
 
             self._motor.stop()
@@ -134,7 +135,7 @@ class MotorSetBase(SmartMotorBase):
     def to_position(self, position_perc, speed=None, brake=True, wait=True):
         if not speed:
             speed = self._speed
-        
+
         logger.info('Moving {} to {}% (current: {}, target: {})'.format(self._name, position_perc, self.current_position, self.perc_to_position(position_perc)))
         for motor in self._motor:
             # print('Moving MotorSet {} to {}'.format(self._name, self.perc_to_position(position_perc)))
@@ -249,9 +250,8 @@ class ColorSensorMotor(SmartMotorBase):
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, True)
 
-
     def to_position(self, position_perc, speed=None, brake=True, wait=True):
-        """ 
+        """
         custom to_position implementation to determine shortest path to use
         for base
         """
@@ -260,7 +260,7 @@ class ColorSensorMotor(SmartMotorBase):
 
         target_position = self.perc_to_position(position_perc)
         logger.info('Moving {} to {}% (current: {}, target: {})'.format(self._name, position_perc, self.current_position, target_position))
-        
+
         if self.current_position - target_position > self.center_position:
             target_position = self.max_position + target_position
             logger.info('1 - Adjusting target position to {} to force shortest path'.format(target_position))
@@ -271,9 +271,9 @@ class ColorSensorMotor(SmartMotorBase):
         if target_position != self.perc_to_position(position_perc) and wait is not True:
             logger.info('Forcing wait=True for movement due to adjusted target position')
             wait = True
-        
+
         self._motor.on_to_position(speed, target_position, brake, wait)
-        
+
         # set theoretical position after shortest path adjustment
         if target_position != self.perc_to_position(position_perc):
             # logger.debug('Waiting for shortest path relative position adjustment...')

@@ -191,7 +191,7 @@ def calibrate_motors():
     # reach it's full range without hitting the floor.
     shoulder_motors.calibrate()
     logger.debug(shoulder_motors)
-    
+
     elbow_motor.calibrate(to_center=False)
     logger.debug(elbow_motor)
 
@@ -232,9 +232,6 @@ def log_power_info():
 def clean_shutdown(signal_received=None, frame=None):
     """ make sure all motors are stopped when stopping this script """
     logger.info('Shutting down...')
-        
-    global running
-    running = False
 
     # This seems to help?!
     reset_motors()
@@ -277,12 +274,12 @@ calibrate_motors()
 
 # contains only calibrated motors for now
 motors = {
-    'waist': waist_motor, 
-    'shoulder': shoulder_motors, 
-    'elbow': elbow_motor, 
-    'roll': roll_motor, 
-    # 'pitch': pitch_motor, 
-    # 'spin': spin_motor, 
+    'waist': waist_motor,
+    'shoulder': shoulder_motors,
+    'elbow': elbow_motor,
+    'roll': roll_motor,
+    # 'pitch': pitch_motor,
+    # 'spin': spin_motor,
     # 'grabber': grabber_motor,
 }
 
@@ -294,7 +291,7 @@ def moves_from_file(command_file):
         for row in csv_reader:
 
             for motor, position in row.items():
-                if position == None:
+                if position is None:
                     logger.debug('Skip invalid position {} for motor {}'.format(position, motor))
                     continue
 
@@ -306,7 +303,7 @@ def moves_from_file(command_file):
 
                 if motor in motors:
                     motors[motor].to_position(int(position), wait=False)
-            
+
             # testing...
             # time.sleep(1)
             # for motor in motors:
