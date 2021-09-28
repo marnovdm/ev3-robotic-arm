@@ -223,28 +223,6 @@ def calibrate_motors():
 # Not sure why but resetting all motors before doing anything else seems to improve reliability
 reset_motors()
 
-# Variables for stick input
-shoulder_speed = 0
-elbow_speed = 0
-
-# Variables for button input
-waist_left = False
-waist_right = False
-roll_left = False
-roll_right = False
-pitch_up = False
-pitch_down = False
-spin_left = False
-spin_right = False
-grabber_open = False
-grabber_close = False
-
-# We are running!
-speed_modifier = 0
-waist_target_color = 0
-aligning_waist = False
-running = True
-
 
 def log_power_info():
     logger.info('Local battery power: {}V / {}A'.format(round(power.measured_volts, 2), round(power.measured_amps, 2)))
