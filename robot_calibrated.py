@@ -164,7 +164,7 @@ elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sen
 roll_motor = TouchSensorMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_A), speed=30, name='roll', sensor=roll_touch, max_position=-1000)
 pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
-    remote_motor.OUTPUT_B), speed=10, padding=20, name='pitch')
+    remote_motor.OUTPUT_B), speed=20, padding=30, name='pitch', max_position=-900)
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
    remote_motor.OUTPUT_C), max_position=14 * 360, speed=20, name='spin')
@@ -208,8 +208,8 @@ def calibrate_motors():
     logger.debug(waist_motor)
 
     # not strong enough yet :(
-    # pitch_motor.calibrate(timeout=10000)  # needs to be more robust, gear slips now instead of stalling the motor
-    # logger.debug(pitch_motor)
+    pitch_motor.calibrate(timeout=5000)  # needs to be more robust, gear slips now instead of stalling the motor
+    logger.debug(pitch_motor)
 
     # if grabber_motor:
     #     grabber_motor.calibrate(to_center=False, timeout=7000)
@@ -274,7 +274,7 @@ motors = {
     'elbow': elbow_motor,
     'roll': roll_motor,
     'pitch': pitch_motor,
-    # 'spin': spin_motor,
+    'spin': spin_motor,
     # 'grabber': grabber_motor,
 }
 
@@ -311,12 +311,12 @@ def moves_from_file(command_file):
                 time.sleep(0.5)
             
             time.sleep(0.5)
-            logger.info(waist_motor)
+            # logger.info(waist_motor)
             
             # while any((motor.is_running for name, motor in motors.items())):
             #     time.sleep(0.5)
 
 
-# moves_from_file('commands.csv')
-moves_from_file('waist.csv')
+moves_from_file('commands.csv')
+# moves_from_file('waist.csv')
 clean_shutdown()

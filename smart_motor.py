@@ -271,16 +271,16 @@ class ColorSensorMotor(SmartMotorBase):
             target_position = requested_target_position
             logger.info('3 - Using requested target position as-is: {}'.format(target_position))
         
-        if target_position != requested_target_position and wait is not True:
-            wait = True
-            logger.info('Forcing wait=True for movement due to adjusted target position')
+        # if target_position != requested_target_position and wait is not True:
+        #     wait = True
+        #     logger.info('Forcing wait=True for movement due to adjusted target position')
 
         self._motor.on_to_position(speed, target_position, brake, wait)
 
         # set theoretical position after shortest path adjustment
         if target_position != requested_target_position:
-            # logger.debug('Waiting for shortest path relative position adjustment...')
-            # self._motor.wait_until_not_moving()
+            logger.debug('Waiting for shortest path relative position adjustment...')
+            self._motor.wait_until_not_moving()
             logger.debug('adjusting shortest path...')
             # self._motor.stop()
             self._motor.reset()
