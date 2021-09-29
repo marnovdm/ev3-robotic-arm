@@ -258,28 +258,35 @@ class ColorSensorMotor(SmartMotorBase):
         if not speed:
             speed = self._speed
 
-        target_position = self.perc_to_position(position_perc)
-        logger.info('Moving {} to {}% (current: {}, target: {})'.format(self._name, position_perc, self.current_position, target_position))
+        requested_target_position = self.perc_to_position(position_perc)
+        logger.info('Moving {} to {}% (current: {}, target: {})'.format(self._name, position_perc, self.current_position, requested_target_position))
 
-        if self.current_position - target_position > self.center_position:
-            target_position = self.max_position + target_position
+        if self.current_position - requested_target_position > self.center_position:
+            target_position = self.max_position + requested_target_position
             logger.info('1 - Adjusting target position to {} to force shortest path'.format(target_position))
-        elif self.current_position - target_position < -self.center_position:
-            target_position = (self.max_position - target_position) * -1
+        elif self.current_position - requested_target_position < -self.center_position:
+            target_position = (self.max_position - requested_target_position) * -1
             logger.info('2 - Adjusting target position to {} to force shortest path'.format(target_position))
-
-        if target_position != self.perc_to_position(position_perc) and wait is not True:
-            logger.info('Forcing wait=True for movement due to adjusted target position')
+        else:
+            target_position = requested_target_position
+            logger.info('3 - Using requested target position as-is: {}'.format(target_position))
+        
+        if target_position != requested_target_position and wait is not True:
             wait = True
+            logger.info('Forcing wait=True for movement due to adjusted target position')
 
         self._motor.on_to_position(speed, target_position, brake, wait)
 
         # set theoretical position after shortest path adjustment
-        if target_position != self.perc_to_position(position_perc):
+        if target_position != requested_target_position:
             # logger.debug('Waiting for shortest path relative position adjustment...')
             # self._motor.wait_until_not_moving()
-            self._motor.position = self.perc_to_position(position_perc)
-            logger.debug('Shortest path adjustment complete')
+            logger.debug('adjusting shortest path...')
+            # self._motor.stop()
+            self._motor.reset()
+            self._motor.position = requested_target_position
+            logger.debug('Shortest path adjustment complete!')
+            # time.sleep(1)
 
 
 class TouchSensorMotor(SmartMotorBase):
