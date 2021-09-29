@@ -7,6 +7,9 @@ logger = logging.getLogger('robot_calibrated')
 class CalibrationError(Exception):
     pass
 
+class MotorMoveError(Exception):
+    pass
+
 
 class SmartMotorBase:
     """ base class for handling motors """
@@ -116,7 +119,7 @@ class LimitedRangeMotor(SmartMotorBase):
             self._max_position = self._motor.position - self._padding
 
         if to_center:
-            self._motor.on_to_position(self._speed, self.center_position, True, True)
+            self._motor.on_to_position(self._speed, self.center_position, True, False)
 
         logger.info('Motor {} found max {}'.format(self._name, self._max_position))
 
@@ -248,7 +251,7 @@ class ColorSensorMotor(SmartMotorBase):
         self._max_position = self._motor.position
 
         if to_center:
-            self._motor.on_to_position(self._speed, self.center_position, True, True)
+            self._motor.on_to_position(self._speed, self.center_position, True, False)
 
     def to_position(self, position_perc, speed=None, brake=True, wait=True):
         """
@@ -308,6 +311,21 @@ class TouchSensorMotor(SmartMotorBase):
     def calibrate(self, to_center=True, timeout=30000):
         super().calibrate(to_center, timeout)
         if not self._sensor.is_pressed:
+            # @TODO implement _motor.wait() logic with custom wait method to check
+            # both the button being pressend & the touch sensor, and handle the timeout.
+            """
+            def _check_motor_state(state):
+                logger.debug(state)
+                if 'overloaded' in state or 'stalled' in state:
+                    return True
+
+                return False
+
+            # self._motor.wait_until('stalled')
+            if not self._motor.wait(_check_motor_state, timeout):
+                self._motor.stop()
+                raise CalibrationError('reached timeout while calibrating')
+            """
             self._motor.on_for_seconds(self._speed, timeout, True, False)
             if not self._sensor.wait_for_pressed(timeout):
                 self._motor.stop()
@@ -325,7 +343,7 @@ class TouchSensorMotor(SmartMotorBase):
         self._motor.reset()
 
         if to_center:
-            self._motor.on_to_position(self._speed, self.center_position, True, True)
+            self._motor.on_to_position(self._speed, self.center_position, True, False)
 
 
 class TouchSensorMotorSet(MotorSetBase):

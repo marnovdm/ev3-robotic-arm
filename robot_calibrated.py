@@ -38,7 +38,7 @@ from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 
 # from math_helper import scale_stick
 from smart_motor import (ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
-                         TouchSensorMotor, TouchSensorMotorSet)
+                         TouchSensorMotor, TouchSensorMotorSet, MotorMoveError)
 
 # Config
 REMOTE_HOST = '10.42.0.3'
@@ -164,10 +164,10 @@ elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sen
 roll_motor = TouchSensorMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_A), speed=30, name='roll', sensor=roll_touch, max_position=-1000)
 pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
-    remote_motor.OUTPUT_B), speed=20, padding=30, name='pitch', max_position=-900)
+    remote_motor.OUTPUT_B), speed=20, padding=30, name='pitch', max_position=-850)
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
-   remote_motor.OUTPUT_C), max_position=14 * 360, speed=20, name='spin')
+   remote_motor.OUTPUT_C), max_position=1000, speed=40, name='spin')
 # spin_motor = LimitedRangeMotor(remote_motor.MediumMotor(
 #    remote_motor.OUTPUT_C), speed=20, name='spin')
 # spin_motor = TouchSensorMotor(remote_motor.MediumMotor(
@@ -175,7 +175,7 @@ spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
 
 try:
     grabber_motor = LimitedRangeMotor(
-        remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=10, name='grabber')
+        remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=10, name='grabber', max_position=500)
     grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
     logger.info("Grabber motor detected!")
 except DeviceNotFound:
@@ -212,7 +212,7 @@ def calibrate_motors():
     logger.debug(pitch_motor)
 
     # if grabber_motor:
-    #     grabber_motor.calibrate(to_center=False, timeout=7000)
+    #     grabber_motor.calibrate(to_center=True, timeout=10000)
     #     logger.debug(grabber_motor)
 
     # roll & spin motor are still missing here - spin motor can move indefinitely though
@@ -281,6 +281,7 @@ motors = {
 
 # @TODO implement , repeat=False, timeout=10000
 def moves_from_file(command_file):
+    motor_wait_max = 10  # seconds
     logger.info('Reading moves from {}...'.format(command_file))
     with open(command_file, newline='') as csv_file:
         csv_reader = csv.DictReader(csv_file)
@@ -304,10 +305,14 @@ def moves_from_file(command_file):
             # time.sleep(1)
             # for motor in motors:
             #     print('Motor {} is running: {}'.format(motor._name, motor.is_running))
+            motor_wait_start = time.time()
             while any((motor.is_running for name, motor in motors.items())):
                 for name, motor in motors.items():
                     if motor.is_running:
                         logger.info('Waiting for {}...'.format(name))
+                if time.time() > (motor_wait_start + motor_wait_max):
+                    raise MotorMoveError('timed out while waiting for move to complete')
+
                 time.sleep(0.5)
             
             time.sleep(0.5)
