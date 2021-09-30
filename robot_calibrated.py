@@ -140,7 +140,7 @@ pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_B), speed=20, name='pitch', max_position=-800)
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
-   remote_motor.OUTPUT_C), max_position=2800, speed=40, name='spin')
+   remote_motor.OUTPUT_C), max_position=2800, speed=60, name='spin')
 
 try:
     grabber_motor = LimitedRangeMotor(
@@ -187,14 +187,14 @@ def calibrate_motors():
 
     # Note that the order here matters. We want to ensure the shoulder is calibrated first so the elbow can
     # reach it's full range without hitting the floor.
-    shoulder_motors.calibrate(timeout=10000)
+    shoulder_motors.calibrate()
     logger.debug(shoulder_motors)
 
-    elbow_motor.calibrate(to_center=False, timeout=5000)
+    elbow_motor.calibrate(to_center=False)
     logger.debug(elbow_motor)
 
     # roll first, because otherwise we might not be able to move elbow all the way
-    roll_motor.calibrate(timeout=5000)
+    roll_motor.calibrate()
     logger.debug(roll_motor)
 
     # shoulder_motors.to_position(50, wait=False)
@@ -206,7 +206,7 @@ def calibrate_motors():
     logger.debug(waist_motor)
 
     # not strong enough yet :(
-    pitch_motor.calibrate(timeout=5000)  # needs to be more robust, gear slips now instead of stalling the motor
+    pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
     logger.debug(pitch_motor)
     
     # spin_motor.calibrate(timeout=10000)

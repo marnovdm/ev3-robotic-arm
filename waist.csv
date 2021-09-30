@@ -10,3 +10,6 @@ waist,shoulder,elbow,roll,pitch,spin,grab
 10,None,None,None,None,None,None
 50,None,None,None,None,None,None
 0,None,None,None,None,None,None
+,,,,,50,
+,,,,,100,
+,,,,,0,
