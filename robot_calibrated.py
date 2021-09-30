@@ -112,12 +112,7 @@ set_led_colors("YELLOW")
 power = PowerSupply(name_pattern='*ev3*')
 remote_power = remote_power_mod.PowerSupply(name_pattern='*ev3*')
 
-# Sound
-# sound = Sound()
-
-# Primary EV3
-# Sensors
-# try:
+# Primary EV3 - sensors
 color_sensor = ColorSensor(INPUT_1)
 color_sensor.mode = ColorSensor.MODE_COL_COLOR
 logger.info("Color sensor detected!")
@@ -131,47 +126,21 @@ logger.info("Elbow touch sensor detected!")
 roll_touch = remote_sensor_lego.TouchSensor(remote_sensor.INPUT_1)
 logger.info("Roll touch sensor detected!")
 
-
-def motors_to_center():
-    """ move all motors to their default position """
-
-    shoulder_motors.on_to_position(
-        SLOW_SPEED, shoulder_motors.center_position, True, True)
-    elbow_motor.on_to_position(SLOW_SPEED, elbow_motor.center_position, True, True)
-
-    roll_motor.on_to_position(NORMAL_SPEED, roll_motor.center_position, True, False)
-    pitch_motor.on_to_position(NORMAL_SPEED, 0, True, False)
-    spin_motor.on_to_position(NORMAL_SPEED, spin_motor.center_position, True, False)
-
-    if grabber_motor:
-        grabber_motor.on_to_position(
-            NORMAL_SPEED, grabber_motor.center_position, True, True)
-
-    waist_motor.on_to_position(FAST_SPEED, waist_motor.center_position, True, True)
-
-
-# Motors
+# Primary EV3 - motors
 waist_motor = ColorSensorMotor(LargeMotor(
     OUTPUT_A), speed=NORMAL_SPEED, name='waist', sensor=color_sensor, color=5)  # 5 = red
 shoulder_motors = TouchSensorMotorSet(
     [LargeMotor(OUTPUT_B), LargeMotor(OUTPUT_C)], speed=30, name='shoulder', sensor=shoulder_touch, max_position=-1000)
-elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-800)
+elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-750)
 
-# Secondary EV3
-# Motors
-# roll_motor = LimitedRangeMotor(remote_motor.MediumMotor(
-#     remote_motor.OUTPUT_A), speed=30, name='roll')
+# Secondary EV3 - motors
 roll_motor = TouchSensorMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_A), speed=30, name='roll', sensor=roll_touch, max_position=-1000)
 pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
-    remote_motor.OUTPUT_B), speed=20, padding=30, name='pitch', max_position=-850)
+    remote_motor.OUTPUT_B), speed=20, name='pitch', max_position=-800)
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
-   remote_motor.OUTPUT_C), max_position=1000, speed=40, name='spin')
-# spin_motor = LimitedRangeMotor(remote_motor.MediumMotor(
-#    remote_motor.OUTPUT_C), speed=20, name='spin')
-# spin_motor = TouchSensorMotor(remote_motor.MediumMotor(
-#     remote_motor.OUTPUT_C), speed=20, name='spin', sensor=spin_touch, max_position=500)
+   remote_motor.OUTPUT_C), max_position=2800, speed=40, name='spin')
 
 try:
     grabber_motor = LimitedRangeMotor(
@@ -183,16 +152,45 @@ except DeviceNotFound:
     grabber_motor = False
 
 
+# contains only calibrated motors for now
+motors = {
+    'waist': waist_motor,
+    'shoulder': shoulder_motors,
+    'elbow': elbow_motor,
+    'roll': roll_motor,
+    'pitch': pitch_motor,
+    'spin': spin_motor,
+    # 'grabber': grabber_motor,
+}
+
+def wait_for_motors(motor_wait_max=10):
+    """ max wait in seconds """
+    motor_wait_start = time.time()
+    while any((motor.is_running for name, motor in motors.items())):
+        for name, motor in motors.items():
+            if motor.is_stalled or motor.is_overloaded:
+                logger.error('Waiting for motor {}, currently at position {}, state {}'.format(name, motor.current_position, motor.state))
+                clean_shutdown()
+                # raise MotorMoveError('stalled/overloaded while waiting for move to complete')
+            elif motor.is_running:
+                logger.info('Waiting for motor {}, currently at position {}, state {}'.format(name, motor.current_position, motor.state))
+
+        if time.time() > (motor_wait_start + motor_wait_max):
+            raise MotorMoveError('timed out while waiting for move to complete')
+
+        time.sleep(0.5)
+
+
 def calibrate_motors():
     set_led_colors("ORANGE")
     logger.info('Calibrating motors...')
 
     # Note that the order here matters. We want to ensure the shoulder is calibrated first so the elbow can
     # reach it's full range without hitting the floor.
-    shoulder_motors.calibrate()
+    shoulder_motors.calibrate(timeout=10000)
     logger.debug(shoulder_motors)
 
-    elbow_motor.calibrate(to_center=False)
+    elbow_motor.calibrate(to_center=False, timeout=5000)
     logger.debug(elbow_motor)
 
     # roll first, because otherwise we might not be able to move elbow all the way
@@ -204,20 +202,23 @@ def calibrate_motors():
 
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
-    waist_motor.calibrate()
+    waist_motor.calibrate(timeout=10000)
     logger.debug(waist_motor)
 
     # not strong enough yet :(
     pitch_motor.calibrate(timeout=5000)  # needs to be more robust, gear slips now instead of stalling the motor
     logger.debug(pitch_motor)
-
+    
+    # spin_motor.calibrate(timeout=10000)
+    # logger.debug(spin_motor)
     # if grabber_motor:
     #     grabber_motor.calibrate(to_center=True, timeout=10000)
     #     logger.debug(grabber_motor)
 
     # roll & spin motor are still missing here - spin motor can move indefinitely though
 
-    set_led_colors("AMBER")
+    set_led_colors("GREEN")
+    wait_for_motors(2)
 
 
 # Not sure why but resetting all motors before doing anything else seems to improve reliability
@@ -232,7 +233,7 @@ def log_power_info():
 def clean_shutdown(signal_received=None, frame=None):
     """ make sure all motors are stopped when stopping this script """
     logger.info('Shutting down...')
-
+    set_led_colors("RED")
     # This seems to help?!
     reset_motors()
 
@@ -267,29 +268,16 @@ signal(SIGINT, clean_shutdown)
 log_power_info()
 calibrate_motors()
 
-# contains only calibrated motors for now
-motors = {
-    'waist': waist_motor,
-    'shoulder': shoulder_motors,
-    'elbow': elbow_motor,
-    'roll': roll_motor,
-    'pitch': pitch_motor,
-    'spin': spin_motor,
-    # 'grabber': grabber_motor,
-}
-
 
 # @TODO implement , repeat=False, timeout=10000
 def moves_from_file(command_file):
-    motor_wait_max = 10  # seconds
     logger.info('Reading moves from {}...'.format(command_file))
     with open(command_file, newline='') as csv_file:
         csv_reader = csv.DictReader(csv_file)
         for row in csv_reader:
 
             for motor, position in row.items():
-                if position == 'None':  # lame None as string from csv reader...
-                    # logger.debug('Skip invalid position {} for motor {}'.format(position, motor))
+                if position is None:
                     continue
 
                 try:
@@ -301,19 +289,7 @@ def moves_from_file(command_file):
                 if motor in motors:
                     motors[motor].to_position(int(position), wait=False)
 
-            # testing...
-            # time.sleep(1)
-            # for motor in motors:
-            #     print('Motor {} is running: {}'.format(motor._name, motor.is_running))
-            motor_wait_start = time.time()
-            while any((motor.is_running for name, motor in motors.items())):
-                for name, motor in motors.items():
-                    if motor.is_running:
-                        logger.info('Waiting for {}...'.format(name))
-                if time.time() > (motor_wait_start + motor_wait_max):
-                    raise MotorMoveError('timed out while waiting for move to complete')
-
-                time.sleep(0.5)
+            wait_for_motors(10)
             
             time.sleep(0.5)
             # logger.info(waist_motor)
