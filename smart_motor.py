@@ -52,7 +52,7 @@ class SmartMotorBase:
         return int(((self._max_position - self._min_position) / 100) * self.current_position)
 
     def perc_to_position(self, perc):
-        return int(((self._max_position - self._min_position) / 100) * perc)
+        return int(((self._max_position - self._min_position) / 100) * perc) + self._min_position
 
     def to_position(self, position_perc, speed=None, brake=True, wait=True):
         if not speed:
@@ -69,11 +69,16 @@ class SmartMotorBase:
 
 
 class StaticRangeMotor(SmartMotorBase):
-    def __init__(self, motor, name, speed=30, padding=10, inverted=False, debug=False, max_position=None):
-        # let's assume we're in center upon init and fake min and max to allow moving both ways on start
-        self._max_position = max_position / 2
-        self._min_position = (max_position / 2) * -1
+    def __init__(self, motor, name, speed=30, padding=10, inverted=False, debug=False, max_position=None, assume_min=False):
         super().__init__(motor, name, speed, padding, inverted, debug)
+        if assume_min:
+            self._max_position = max_position
+            self._min_position = 0
+        else:
+            # let's assume we're in center upon init and fake min and max to allow moving both ways on start
+            self._max_position = max_position / 2
+            self._min_position = (max_position / 2) * -1
+
 
     def calibrate(self, to_center=True, timeout=5000):
         raise NotImplementedError
@@ -102,16 +107,21 @@ class LimitedRangeMotor(SmartMotorBase):
         if not self._motor.wait(_check_motor_state, timeout):
             self._motor.stop()
             raise CalibrationError('reached timeout while calibrating')
-
-        self._motor.reset()  # sets 0 point
         
+        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
+        self._motor.stop()
+        self._motor.reset()  # sets 0 point
+        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
+
         # testing
         time.sleep(0.5)
-        
+        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
         self._min_position = self._motor.position # + self._padding
-        
+        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
         # testing..?!
-        # self._motor.position = self._min_position
+        self._motor.position = self._min_position
+        self._min_position = self._motor.position # + self._padding
+        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
 
         if not self._max_position:
             logger.debug('Finding max position for {}...'.format(self._name))
@@ -251,12 +261,8 @@ class ColorSensorMotor(SmartMotorBase):
             logger.info('2 - Adjusting target position to {} to force shortest path'.format(target_position))
         else:
             target_position = requested_target_position
-            logger.info('3 - Using requested target position as-is: {}'.format(target_position))
+            # logger.info('3 - Using requested target position as-is: {}'.format(target_position))
         
-        # if target_position != requested_target_position and wait is not True:
-        #     wait = True
-        #     logger.info('Forcing wait=True for movement due to adjusted target position')
-
         self._motor.on_to_position(speed, target_position, brake, wait)
 
         # set theoretical position after shortest path adjustment

@@ -16,7 +16,10 @@
 # - increase joystick deadzone a bit to prevent unintended movement while pressing L3/R3
 # - start work on calibration support using touch sensors
 # - prevent calculate_speed() returning values over 100 which causes exceptions
-
+# v3 - major changes by Marno van der Molen
+# - implement SmartMotor classes which abstracts the differences
+# - support calibration using some touch/color sensors
+# - perform moves from CSV files
 __author__ = 'Nino Guba'
 
 import logging
@@ -28,15 +31,12 @@ from signal import SIGINT, signal
 
 # import evdev
 import rpyc
-from ev3dev2 import DeviceNotFound
 from ev3dev2.led import Leds
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor
 from ev3dev2.power import PowerSupply
 from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor, TouchSensor
-# from evdev import InputDevice
 
-# from math_helper import scale_stick
 from smart_motor import (ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
                          TouchSensorMotor, TouchSensorMotorSet, MotorMoveError)
 
@@ -67,8 +67,7 @@ def reset_motors():
     roll_motor.reset()
     pitch_motor.reset()
     spin_motor.reset()
-    if grabber_motor:
-        grabber_motor.reset()
+    grabber_motor.reset()
 
 
 # Initial setup
@@ -94,19 +93,24 @@ leds = Leds()
 remote_leds = remote_led.Leds()
 
 
-def set_led_colors(color):
-    leds.set_color("LEFT", "BLACK")
-    leds.set_color("RIGHT", "BLACK")
-    remote_leds.set_color("LEFT", "BLACK")
-    remote_leds.set_color("RIGHT", "BLACK")
-    # sound.play_song((('C4', 'e'), ('D4', 'e'), ('E5', 'q')))
-    leds.set_color("LEFT", color)
-    leds.set_color("RIGHT", color)
-    remote_leds.set_color("LEFT", color)
-    remote_leds.set_color("RIGHT", color)
+def set_led_colors(color, animate=False):
+    """ helper to set LED color easily on both EV3 bricks """
+    
+    # stop any running animations
+    leds.animate_stop()
+    remote_leds.animate_stop()
+    
+    if animate:
+        leds.animate_flash(color, groups=('LEFT', 'RIGHT'), sleeptime=0.5, duration=None, block=False)
+    else:
+        leds.set_color("LEFT", color)
+        leds.set_color("RIGHT", color)
+        remote_leds.set_color("LEFT", color)
+        remote_leds.set_color("RIGHT", color)
 
 
-set_led_colors("YELLOW")
+# Start initialization of devices...
+set_led_colors("YELLOW", animate=True)
 
 # Power
 power = PowerSupply(name_pattern='*ev3*')
@@ -141,15 +145,9 @@ pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
    remote_motor.OUTPUT_C), max_position=2800, speed=60, name='spin')
-
-try:
-    grabber_motor = LimitedRangeMotor(
-        remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=10, name='grabber', max_position=500)
-    grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
-    logger.info("Grabber motor detected!")
-except DeviceNotFound:
-    logger.info("Grabber motor not detected - running without it...")
-    grabber_motor = False
+grabber_motor = StaticRangeMotor(
+    remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=20, name='grabber', max_position=-1000, assume_min=True)
+grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 
 
 # contains only calibrated motors for now
@@ -160,17 +158,20 @@ motors = {
     'roll': roll_motor,
     'pitch': pitch_motor,
     'spin': spin_motor,
-    # 'grabber': grabber_motor,
+    'grab': grabber_motor,
 }
 
-def wait_for_motors(motor_wait_max=10):
+def wait_for_motors(motor_wait_max=10, max_stalls=2):
     """ max wait in seconds """
     motor_wait_start = time.time()
+    stalls = 0
     while any((motor.is_running for name, motor in motors.items())):
         for name, motor in motors.items():
-            if motor.is_stalled or motor.is_overloaded:
+            if motor.is_running and (motor.is_stalled or motor.is_overloaded):
                 logger.error('Waiting for motor {}, currently at position {}, state {}'.format(name, motor.current_position, motor.state))
-                clean_shutdown()
+                stalls += 1
+                if stalls >= max_stalls:
+                    clean_shutdown()
                 # raise MotorMoveError('stalled/overloaded while waiting for move to complete')
             elif motor.is_running:
                 logger.info('Waiting for motor {}, currently at position {}, state {}'.format(name, motor.current_position, motor.state))
@@ -199,26 +200,21 @@ def calibrate_motors():
 
     # shoulder_motors.to_position(50, wait=False)
     elbow_motor.to_position(50)
+    
+    pitch_motor.calibrate()
+    logger.debug(pitch_motor)
 
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate(timeout=10000)
     logger.debug(waist_motor)
 
-    # not strong enough yet :(
-    pitch_motor.calibrate()  # needs to be more robust, gear slips now instead of stalling the motor
-    logger.debug(pitch_motor)
-    
     # spin_motor.calibrate(timeout=10000)
-    # logger.debug(spin_motor)
-    # if grabber_motor:
-    #     grabber_motor.calibrate(to_center=True, timeout=10000)
-    #     logger.debug(grabber_motor)
+    logger.debug(spin_motor)
+    logger.debug(grabber_motor)
 
-    # roll & spin motor are still missing here - spin motor can move indefinitely though
-
+    wait_for_motors(4)
     set_led_colors("GREEN")
-    wait_for_motors(2)
 
 
 # Not sure why but resetting all motors before doing anything else seems to improve reliability
@@ -249,13 +245,9 @@ def clean_shutdown(signal_received=None, frame=None):
     logger.info('spin..')
     spin_motor.stop()
     logger.info('pitch..')
-    # For some reason the pitch motor sometimes gets stuck here, and a reset helps?
-    pitch_motor.reset()
     pitch_motor.stop()
-
-    if grabber_motor:
-        logger.info('grabber..')
-        grabber_motor.stop()
+    logger.info('grabber..')
+    grabber_motor.stop()
 
     leds.reset()
     remote_leds.reset()
@@ -269,35 +261,32 @@ log_power_info()
 calibrate_motors()
 
 
-# @TODO implement , repeat=False, timeout=10000
 def moves_from_file(command_file):
     logger.info('Reading moves from {}...'.format(command_file))
-    with open(command_file, newline='') as csv_file:
+    with open(command_file, newline='', encoding='utf-8') as csv_file:
         csv_reader = csv.DictReader(csv_file)
         for row in csv_reader:
 
             for motor, position in row.items():
-                if position is None:
+                if position is None or position == '':
                     continue
 
                 try:
                     int(position)
                 except ValueError:
-                    logger.debug('Skip invalid row, got position {} for motor {}'.format(position, motor))
+                    logger.debug('Skip invalid row, got position "{}" for motor {}'.format(position, motor))
                     break
 
                 if motor in motors:
                     motors[motor].to_position(int(position), wait=False)
 
-            wait_for_motors(10)
-            
-            time.sleep(0.5)
-            # logger.info(waist_motor)
-            
-            # while any((motor.is_running for name, motor in motors.items())):
-            #     time.sleep(0.5)
+            wait_for_motors(5)
+
+            # sleep time between rows
+            time.sleep(1)
 
 
-moves_from_file('commands.csv')
-# moves_from_file('waist.csv')
+for cmd_file in ['commands.csv']:  # , 'waist.csv']:
+    moves_from_file(cmd_file)
+
 clean_shutdown()
