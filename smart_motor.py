@@ -96,8 +96,9 @@ class LimitedRangeMotor(SmartMotorBase):
         super().calibrate(to_center, timeout)
 
         def _check_motor_state(state):
-            # logger.debug(state)
-            if 'overloaded' in state or 'stalled' in state:
+            logger.debug(state)
+            logger.debug(self._motor.duty_cycle)
+            if 'overloaded' in state or 'stalled' in state or self._motor.duty_cycle >= 80:
                 return True
 
             return False

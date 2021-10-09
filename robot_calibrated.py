@@ -37,7 +37,7 @@ from ev3dev2.power import PowerSupply
 from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 
-from smart_motor import (ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
+from smart_motor import (CalibrationError, ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
                          TouchSensorMotor, TouchSensorMotorSet, MotorMoveError)
 
 # Config
@@ -95,12 +95,11 @@ remote_leds = remote_led.Leds()
 
 def set_led_colors(color, animate=False):
     """ helper to set LED color easily on both EV3 bricks """
-    
-    # stop any running animations
-    leds.animate_stop()
-    remote_leds.animate_stop()
-    
+
     if animate:
+        # stop any running animations
+        leds.animate_stop()
+        remote_leds.animate_stop()
         leds.animate_flash(color, groups=('LEFT', 'RIGHT'), sleeptime=0.5, duration=None, block=False)
     else:
         leds.set_color("LEFT", color)
@@ -145,8 +144,10 @@ pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
    remote_motor.OUTPUT_C), max_position=2800, speed=60, name='spin')
-grabber_motor = StaticRangeMotor(
-    remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=20, name='grabber', max_position=-1000, assume_min=True)
+# grabber_motor = StaticRangeMotor(
+#    remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=5, name='grabber', max_position=-5000, assume_min=True)
+grabber_motor = LimitedRangeMotor(
+   remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=20, name='grabber', max_position=-2000)
 grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 
 
@@ -203,7 +204,11 @@ def calibrate_motors():
     
     pitch_motor.calibrate()
     logger.debug(pitch_motor)
-
+    
+    grabber_motor.calibrate(timeout=7000, to_center=False)
+    logger.debug(grabber_motor)
+    grabber_motor.to_position(20)
+    
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate(timeout=10000)
@@ -211,7 +216,6 @@ def calibrate_motors():
 
     # spin_motor.calibrate(timeout=10000)
     logger.debug(spin_motor)
-    logger.debug(grabber_motor)
 
     wait_for_motors(4)
     set_led_colors("GREEN")
@@ -232,6 +236,10 @@ def clean_shutdown(signal_received=None, frame=None):
     set_led_colors("RED")
     # This seems to help?!
     reset_motors()
+    
+    # Let's see if this helps with hanging stop() commands...
+    # for motor in motors:
+    #    motors[motor].stop_action = 'coast'
 
     logger.info('waist..')
     waist_motor.stop()
@@ -240,7 +248,7 @@ def clean_shutdown(signal_received=None, frame=None):
     logger.info('elbow..')
     elbow_motor.stop()
     logger.info('roll..')
-    roll_motor.reset()
+    # roll_motor.reset()
     roll_motor.stop()
     logger.info('spin..')
     spin_motor.stop()
@@ -253,12 +261,6 @@ def clean_shutdown(signal_received=None, frame=None):
     remote_leds.reset()
     logger.info('Shutdown completed.')
     sys.exit(0)
-
-
-# Ensure clean shutdown on CTRL+C
-signal(SIGINT, clean_shutdown)
-log_power_info()
-calibrate_motors()
 
 
 def moves_from_file(command_file):
@@ -286,7 +288,20 @@ def moves_from_file(command_file):
             time.sleep(1)
 
 
-for cmd_file in ['commands.csv']:  # , 'waist.csv']:
-    moves_from_file(cmd_file)
+# Ensure clean shutdown on CTRL+C
+signal(SIGINT, clean_shutdown)
 
-clean_shutdown()
+if __name__ == "__main__":
+    log_power_info()
+    
+    try:
+        calibrate_motors()
+    except CalibrationError:
+        logger.error('Calibration error :(')
+        clean_shutdown()
+        raise
+    
+    for cmd_file in ['commands.csv']:  # , 'waist.csv']:
+        moves_from_file(cmd_file)
+    
+    clean_shutdown()
