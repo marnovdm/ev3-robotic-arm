@@ -89,7 +89,7 @@ class LimitedRangeMotor(SmartMotorBase):
 
     def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, max_position=None):
         self._max_position = max_position
-        self._min_position = 0
+        self._min_position = 0  # padding
         super().__init__(motor, name, speed, padding, inverted, debug)
 
     def calibrate(self, to_center=True, timeout=5000):

@@ -158,7 +158,7 @@ motors = {
     'elbow': elbow_motor,
     'roll': roll_motor,
     'pitch': pitch_motor,
-    'spin': spin_motor,
+    # 'spin': spin_motor,
     'grab': grabber_motor,
 }
 
@@ -288,6 +288,40 @@ def moves_from_file(command_file):
             time.sleep(1)
 
 
+def moves_from_userinput():
+    logger.info('Reading moves from user input...')
+    while True:
+        user_input = input('CSV line: ')
+        user_input_items = user_input.split(',')
+        user_input_dict = {
+            'waist': user_input_items[0],
+            'shoulder': user_input_items[1],
+            'elbow': user_input_items[2],
+            'roll': user_input_items[3],
+            'pitch': user_input_items[4],
+            'spin': user_input_items[5],
+            'grab': user_input_items[6]
+        }
+
+        for motor, position in user_input_dict.items():
+            if position is None or position == '':
+                continue
+
+            try:
+                int(position)
+            except ValueError:
+                logger.debug('Skip invalid row, got position "{}" for motor {}'.format(position, motor))
+                break
+
+            if motor in motors:
+                motors[motor].to_position(int(position), wait=False)
+
+        wait_for_motors(5)
+
+        # sleep time between rows
+        time.sleep(1)
+
+
 # Ensure clean shutdown on CTRL+C
 signal(SIGINT, clean_shutdown)
 
@@ -301,7 +335,11 @@ if __name__ == "__main__":
         clean_shutdown()
         raise
     
-    for cmd_file in ['commands.csv']:  # , 'waist.csv']:
+    
+    for cmd_file in ['pickup.csv']:  # ['commands.csv']:  # , 'waist.csv']:
         moves_from_file(cmd_file)
     
+    moves_from_userinput()
+    
+    # failsafe
     clean_shutdown()
