@@ -208,9 +208,11 @@ class ColorSensorMotor(SmartMotorBase):
     _sensor = None
     _color = None
 
-    def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, color=None):
+    def __init__(self, motor, name, speed=10, padding=10, inverted=False, debug=False, sensor=None, color=None, max_position=None):
         self._sensor = sensor
         self._color = color
+        self._max_position = max_position
+        self._min_position = 0
         super().__init__(motor, name, speed, padding, inverted, debug)
 
     def calibrate(self, to_center=True, timeout=5000):
@@ -225,20 +227,22 @@ class ColorSensorMotor(SmartMotorBase):
         self._motor.reset()
         self._min_position = 0
 
-        # determine full circle rotation length
-        while self._sensor.color == self._color:
-            self._motor.on(self._speed, True, False)
-            time.sleep(0.1)
-
-        # wait to go full circle
-        if self._sensor.color != self._color:
-            self._motor.on(self._speed, False)
-            while self._sensor.color != self._color:
+        if not self._max_position:
+            logger.info('Motor {} looking for max position...'.format(self._name))
+            # determine full circle rotation length
+            while self._sensor.color == self._color:
+                self._motor.on(self._speed, True, False)
                 time.sleep(0.1)
 
-            self._motor.stop()
+            # wait to go full circle
+            if self._sensor.color != self._color:
+                self._motor.on(self._speed, False)
+                while self._sensor.color != self._color:
+                    time.sleep(0.1)
 
-        self._max_position = self._motor.position
+                self._motor.stop()
+
+            self._max_position = self._motor.position
 
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, False)

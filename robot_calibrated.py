@@ -34,7 +34,7 @@ import rpyc
 from ev3dev2.led import Leds
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor
 from ev3dev2.power import PowerSupply
-from ev3dev2.sensor import INPUT_1, INPUT_3, INPUT_4
+from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 
 from smart_motor import (CalibrationError, ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
@@ -116,9 +116,13 @@ power = PowerSupply(name_pattern='*ev3*')
 remote_power = remote_power_mod.PowerSupply(name_pattern='*ev3*')
 
 # Primary EV3 - sensors
-color_sensor = ColorSensor(INPUT_1)
-color_sensor.mode = ColorSensor.MODE_COL_COLOR
-logger.info("Color sensor detected!")
+waist_color_sensor = ColorSensor(INPUT_1)
+waist_color_sensor.mode = ColorSensor.MODE_COL_COLOR
+logger.info("Waist color sensor detected!")
+
+front_color_sensor = ColorSensor(INPUT_2)
+front_color_sensor.mode = ColorSensor.MODE_COL_COLOR
+logger.info("Front color sensor detected!")
 
 shoulder_touch = TouchSensor(INPUT_3)
 logger.info("Shoulder touch sensor detected!")
@@ -131,7 +135,7 @@ logger.info("Roll touch sensor detected!")
 
 # Primary EV3 - motors
 waist_motor = ColorSensorMotor(LargeMotor(
-    OUTPUT_A), speed=NORMAL_SPEED, name='waist', sensor=color_sensor, color=5)  # 5 = red
+    OUTPUT_A), speed=NORMAL_SPEED, name='waist', sensor=waist_color_sensor, color=5)  # 5 = red
 shoulder_motors = TouchSensorMotorSet(
     [LargeMotor(OUTPUT_B), LargeMotor(OUTPUT_C)], speed=30, name='shoulder', sensor=shoulder_touch, max_position=-1000)
 elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sensor=elbow_touch, max_position=-750)
@@ -142,12 +146,10 @@ roll_motor = TouchSensorMotor(remote_motor.MediumMotor(
 pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_B), speed=20, name='pitch', max_position=-800)
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
-spin_motor = StaticRangeMotor(remote_motor.MediumMotor(
-   remote_motor.OUTPUT_C), max_position=2800, speed=60, name='spin')
-# grabber_motor = StaticRangeMotor(
-#    remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=5, name='grabber', max_position=-5000, assume_min=True)
+spin_motor = ColorSensorMotor(remote_motor.MediumMotor(
+    remote_motor.OUTPUT_C), name='spin', speed=25, sensor=front_color_sensor, color=5, max_position=2605)  # 5 = red
 grabber_motor = LimitedRangeMotor(
-   remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=20, name='grabber', max_position=-2000)
+   remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=80, name='grabber', max_position=-2000)
 grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 
 
@@ -180,7 +182,7 @@ def wait_for_motors(motor_wait_max=10, max_stalls=2):
         if time.time() > (motor_wait_start + motor_wait_max):
             raise MotorMoveError('timed out while waiting for move to complete')
 
-        time.sleep(0.5)
+        time.sleep(0.25)  # used to be 0.5
 
 
 def calibrate_motors():
@@ -202,20 +204,30 @@ def calibrate_motors():
     # shoulder_motors.to_position(50, wait=False)
     elbow_motor.to_position(50)
     
-    pitch_motor.calibrate()
-    logger.debug(pitch_motor)
-    
+    # grabber calibration before pitch, so we can move it to position 20 to prevent
+    # blocking pitch motor.
     grabber_motor.calibrate(timeout=7000, to_center=False)
     logger.debug(grabber_motor)
     grabber_motor.to_position(20)
+
+    pitch_motor.calibrate()
+    logger.debug(pitch_motor)
+    wait_for_motors(10)
+
     
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate(timeout=10000)
     logger.debug(waist_motor)
 
-    # spin_motor.calibrate(timeout=10000)
+    waist_motor.to_position(50)
+    shoulder_motors.to_position(88)
+    elbow_motor.to_position(0)
+    pitch_motor.to_position(95)
+    grabber_motor.to_position(30)
+    spin_motor.calibrate(timeout=5000, to_center=False)
     logger.debug(spin_motor)
+    spin_motor.to_position(25)
 
     wait_for_motors(4)
     set_led_colors("GREEN")
@@ -235,60 +247,79 @@ def clean_shutdown(signal_received=None, frame=None):
     logger.info('Shutting down...')
     set_led_colors("RED")
     # This seems to help?!
-    reset_motors()
+    # reset_motors()
     
     # Let's see if this helps with hanging stop() commands...
     # for motor in motors:
     #    motors[motor].stop_action = 'coast'
 
-    logger.info('waist..')
-    waist_motor.stop()
-    logger.info('shoulder..')
-    shoulder_motors.stop()
-    logger.info('elbow..')
-    elbow_motor.stop()
-    logger.info('roll..')
-    # roll_motor.reset()
-    roll_motor.stop()
-    logger.info('spin..')
-    spin_motor.stop()
-    logger.info('pitch..')
-    pitch_motor.stop()
-    logger.info('grabber..')
-    grabber_motor.stop()
+    if waist_motor.is_running:
+        logger.info('waist..')
+        waist_motor.stop()
+    
+    if shoulder_motors.is_running:
+        logger.info('shoulder..')
+        shoulder_motors.stop()
+    
+    if elbow_motor.is_running:
+        logger.info('elbow..')
+        elbow_motor.stop()
+    
+    if roll_motor.is_running:
+        logger.info('roll..')
+        # roll_motor.reset()
+        roll_motor.stop()
+    
+    if spin_motor.is_running:
+        logger.info('spin..')
+        spin_motor.stop()
+    
+    if pitch_motor.is_running:
+        logger.info('pitch..')
+        pitch_motor.stop()
+    
+    if grabber_motor.is_running:
+        logger.info('grabber..')
+        grabber_motor.stop()
 
-    leds.reset()
-    remote_leds.reset()
+    # leds.reset()
+    # remote_leds.reset()
+
     logger.info('Shutdown completed.')
     sys.exit(0)
 
 
-def moves_from_file(command_file):
+def execute_move(moves, motor_wait_time=5):
+    for motor, position in moves.items():
+        if position is None or position == '':
+            continue
+
+        try:
+            int(position)
+        except ValueError:
+            logger.debug('Skip invalid row, got position "{}" for motor {}'.format(position, motor))
+            break
+
+        if motor in motors:
+            motors[motor].to_position(int(position), wait=False)
+    
+    wait_for_motors(motor_wait_time)
+
+def moves_from_file(command_file, wait_between_steps=True):
     logger.info('Reading moves from {}...'.format(command_file))
     with open(command_file, newline='', encoding='utf-8') as csv_file:
         csv_reader = csv.DictReader(csv_file)
         for row in csv_reader:
 
-            for motor, position in row.items():
-                if position is None or position == '':
-                    continue
-
-                try:
-                    int(position)
-                except ValueError:
-                    logger.debug('Skip invalid row, got position "{}" for motor {}'.format(position, motor))
-                    break
-
-                if motor in motors:
-                    motors[motor].to_position(int(position), wait=False)
-
-            wait_for_motors(5)
+            execute_move(row)
 
             # sleep time between rows
-            time.sleep(1)
+            if wait_between_steps:
+                time.sleep(1)
 
 
 def moves_from_userinput():
+    """ moves from user input """
     logger.info('Reading moves from user input...')
     while True:
         user_input = input('CSV line: ')
@@ -302,24 +333,7 @@ def moves_from_userinput():
             'spin': user_input_items[5],
             'grab': user_input_items[6]
         }
-
-        for motor, position in user_input_dict.items():
-            if position is None or position == '':
-                continue
-
-            try:
-                int(position)
-            except ValueError:
-                logger.debug('Skip invalid row, got position "{}" for motor {}'.format(position, motor))
-                break
-
-            if motor in motors:
-                motors[motor].to_position(int(position), wait=False)
-
-        wait_for_motors(5)
-
-        # sleep time between rows
-        time.sleep(1)
+        execute_move(user_input_dict)
 
 
 # Ensure clean shutdown on CTRL+C
@@ -336,8 +350,8 @@ if __name__ == "__main__":
         raise
     
     
-    for cmd_file in ['pickup.csv']:  # ['commands.csv']:  # , 'waist.csv']:
-        moves_from_file(cmd_file)
+    # for cmd_file in ['pickup.csv']:  # ['commands.csv']:  # , 'waist.csv']:
+    #     moves_from_file(cmd_file, wait_between_steps=False)
     
     moves_from_userinput()
     
