@@ -7,6 +7,7 @@ logger = logging.getLogger('robot_calibrated')
 class CalibrationError(Exception):
     pass
 
+
 class MotorMoveError(Exception):
     pass
 
@@ -79,7 +80,6 @@ class StaticRangeMotor(SmartMotorBase):
             self._max_position = max_position / 2
             self._min_position = (max_position / 2) * -1
 
-
     def calibrate(self, to_center=True, timeout=5000):
         raise NotImplementedError
 
@@ -108,7 +108,7 @@ class LimitedRangeMotor(SmartMotorBase):
         if not self._motor.wait(_check_motor_state, timeout):
             self._motor.stop()
             raise CalibrationError('reached timeout while calibrating')
-        
+
         logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
         self._motor.stop()
         self._motor.reset()  # sets 0 point
@@ -117,11 +117,11 @@ class LimitedRangeMotor(SmartMotorBase):
         # testing
         time.sleep(0.5)
         logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
-        self._min_position = self._motor.position # + self._padding
+        self._min_position = self._motor.position  # + self._padding
         logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
         # testing..?!
         self._motor.position = self._min_position
-        self._min_position = self._motor.position # + self._padding
+        self._min_position = self._motor.position  # + self._padding
         logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
 
         if not self._max_position:
@@ -132,12 +132,11 @@ class LimitedRangeMotor(SmartMotorBase):
                 raise CalibrationError('reached timeout while calibrating')
 
             self._motor.stop()
-            self._max_position = self._motor.position # - self._padding
+            self._max_position = self._motor.position  # - self._padding
             logger.info('Motor {} found max {}'.format(self._name, self._max_position))
 
         if to_center:
             self._motor.on_to_position(self._speed, self.center_position, True, False)
-
 
 
 class MotorSetBase(SmartMotorBase):
@@ -176,7 +175,7 @@ class MotorSetBase(SmartMotorBase):
         for motor in self._motor:
             motor.stop()
 
-    def on(self, speed):
+    def on(self, speed):  # pylint: disable=invalid-name
         for motor in self._motor:
             motor.on(speed)
 
@@ -267,7 +266,7 @@ class ColorSensorMotor(SmartMotorBase):
         else:
             target_position = requested_target_position
             # logger.info('3 - Using requested target position as-is: {}'.format(target_position))
-        
+
         self._motor.on_to_position(speed, target_position, brake, wait)
 
         # set theoretical position after shortest path adjustment
@@ -303,12 +302,12 @@ class TouchSensorMotor(SmartMotorBase):
         if not self._sensor.is_pressed:
             # @TODO implement _motor.wait() logic with custom wait method to check
             # both the button being pressend & the touch sensor, and handle the timeout.
-            
+
             def _check_motor_state(state):
                 # logger.debug(state)
                 if 'overloaded' in state or 'stalled' in state:
                     return True
-                
+
                 if self._sensor.is_pressed:
                     return True
 
@@ -319,7 +318,7 @@ class TouchSensorMotor(SmartMotorBase):
             if not self._motor.wait(_check_motor_state, timeout):
                 self._motor.stop()
                 raise CalibrationError('reached timeout while calibrating')
-            
+
             # self._motor.on_for_seconds(self._speed, timeout, True, False)
             # if not self._sensor.wait_for_pressed(timeout):
             #    self._motor.stop()
@@ -359,23 +358,23 @@ class TouchSensorMotorSet(MotorSetBase):
                 # logger.debug(state)
                 if 'overloaded' in state or 'stalled' in state:
                     return True
-                
+
                 if self._sensor.is_pressed:
                     return True
 
                 return False
-            
+
             for motor in self._motor:
                 if self._inverted:
                     motor.on(-self._speed, True, False)
                 else:
                     motor.on(self._speed, True, False)
-            
+
             if not self._motor[0].wait(_check_motor_state, timeout):
                 for motor in self._motor:
                     motor.stop()
                 raise CalibrationError('reached timeout while calibrating')
-            
+
             for motor in self._motor:
                 motor.stop()
 

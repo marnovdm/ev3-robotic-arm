@@ -163,6 +163,7 @@ motors = {
     'grab': grabber_motor,
 }
 
+
 def wait_for_motors(motor_wait_max=10, max_stalls=2):
     """ max wait in seconds """
     motor_wait_start = time.time()
@@ -202,7 +203,7 @@ def calibrate_motors():
 
     # shoulder_motors.to_position(50, wait=False)
     elbow_motor.to_position(50)
-    
+
     # grabber calibration before pitch, so we can move it to position 20 to prevent
     # blocking pitch motor.
     grabber_motor.calibrate(timeout=7000, to_center=False)
@@ -213,7 +214,6 @@ def calibrate_motors():
     logger.debug(pitch_motor)
     wait_for_motors(10)
 
-    
     # The waist motor has to be calibrated after calibrating the shoulder/elbow parts to ensure we're not
     # moving around with fully extended arm (which the waist motor gearing doesn't like)
     waist_motor.calibrate(timeout=10000)
@@ -225,7 +225,7 @@ def calibrate_motors():
     pitch_motor.to_position(95)
     grabber_motor.to_position(30)
     spin_motor.calibrate(timeout=5000, to_center=False)
-    
+
     logger.debug(spin_motor)
     spin_motor.to_position(25)
     waist_motor.to_position(50)
@@ -253,7 +253,7 @@ def clean_shutdown(signal_received=None, frame=None):  # pylint: disable=unused-
     set_led_colors("RED")
     # This seems to help?!
     # reset_motors()
-    
+
     # Let's see if this helps with hanging stop() commands...
     # for motor in motors:
     #    motors[motor].stop_action = 'coast'
@@ -261,28 +261,28 @@ def clean_shutdown(signal_received=None, frame=None):  # pylint: disable=unused-
     if waist_motor.is_running:
         logger.info('waist..')
         waist_motor.stop()
-    
+
     if shoulder_motors.is_running:
         logger.info('shoulder..')
         shoulder_motors.stop()
-    
+
     if elbow_motor.is_running:
         logger.info('elbow..')
         elbow_motor.stop()
-    
+
     if roll_motor.is_running:
         logger.info('roll..')
         # roll_motor.reset()
         roll_motor.stop()
-    
+
     if spin_motor.is_running:
         logger.info('spin..')
         spin_motor.stop()
-    
+
     if pitch_motor.is_running:
         logger.info('pitch..')
         pitch_motor.stop()
-    
+
     if grabber_motor.is_running:
         logger.info('grabber..')
         grabber_motor.stop()
@@ -307,7 +307,7 @@ def execute_move(moves, motor_wait_time=5):
 
         if motor in motors:
             motors[motor].to_position(int(position), wait=False)
-    
+
     wait_for_motors(motor_wait_time)
 
 
@@ -347,19 +347,18 @@ signal(SIGINT, clean_shutdown)
 
 if __name__ == "__main__":
     log_power_info()
-    
+
     try:
         calibrate_motors()
     except CalibrationError:
         logger.error('Calibration error :(')
         clean_shutdown()
         raise
-    
-    
+
     # for cmd_file in ['pickup.csv']:  # ['commands.csv']:  # , 'waist.csv']:
     #     moves_from_file(cmd_file, wait_between_steps=False)
-    
+
     moves_from_userinput()
-    
+
     # failsafe
     clean_shutdown()
