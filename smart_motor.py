@@ -98,7 +98,7 @@ class LimitedRangeMotor(SmartMotorBase):
         def _check_motor_state(state):
             logger.debug(state)
             logger.debug(self._motor.duty_cycle)
-            if 'overloaded' in state or 'stalled' in state or self._motor.duty_cycle >= 80:
+            if 'overloaded' in state or 'stalled' in state or self._motor.duty_cycle >= 90:
                 return True
 
             return False
@@ -109,16 +109,16 @@ class LimitedRangeMotor(SmartMotorBase):
             self._motor.stop()
             raise CalibrationError('reached timeout while calibrating')
 
-        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
+        # logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
         self._motor.stop()
         self._motor.reset()  # sets 0 point
         logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
 
         # testing
-        time.sleep(0.5)
-        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
+        # time.sleep(0.5)
+        # logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
         self._min_position = self._motor.position  # + self._padding
-        logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
+        # logger.debug('Motor {} at position {}'.format(self._name, self._motor.position))
         # testing..?!
         self._motor.position = self._min_position
         self._min_position = self._motor.position  # + self._padding
@@ -216,13 +216,22 @@ class ColorSensorMotor(SmartMotorBase):
 
     def calibrate(self, to_center=True, timeout=5000):
         super().calibrate(to_center, timeout)
-        if self._sensor.color != self._color:
-            self._motor.on(self._speed, True, False)
-            while self._sensor.color != self._color:
-                time.sleep(0.1)
+        
+        def _check_motor_state(state):
+            if self._sensor.color == self._color:
+                return True
 
+            if 'overloaded' in state or 'stalled' in state:
+                return True
+
+            return False
+
+        self._motor.on(self._speed, True, False)
+        if not self._motor.wait(_check_motor_state, timeout):
             self._motor.stop()
-
+            raise CalibrationError('reached timeout while calibrating')        
+        
+        self._motor.stop()
         self._motor.reset()
         self._min_position = 0
 

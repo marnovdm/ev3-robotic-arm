@@ -76,6 +76,7 @@ disable=too-few-public-methods,
         missing-function-docstring,  # @TODO: not required at home lol
         broad-except,  # caught by flake8
         consider-using-f-string,  # nope
+        trailing-whitespace,  # stop complaining
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

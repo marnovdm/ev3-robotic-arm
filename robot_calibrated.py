@@ -141,7 +141,7 @@ elbow_motor = TouchSensorMotor(LargeMotor(OUTPUT_D), speed=30, name='elbow', sen
 
 # Secondary EV3 - motors
 roll_motor = TouchSensorMotor(remote_motor.MediumMotor(
-    remote_motor.OUTPUT_A), speed=30, name='roll', sensor=roll_touch, max_position=-1000)
+    remote_motor.OUTPUT_A), speed=20, name='roll', sensor=roll_touch, max_position=-1000)
 pitch_motor = LimitedRangeMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_B), speed=20, name='pitch', max_position=-800)
 pitch_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
@@ -149,7 +149,7 @@ spin_motor = ColorSensorMotor(remote_motor.MediumMotor(
     remote_motor.OUTPUT_C), name='spin', speed=25, sensor=front_color_sensor, color=5, max_position=2605)  # 5 = red
 grabber_motor = LimitedRangeMotor(
    remote_motor.MediumMotor(remote_motor.OUTPUT_D), speed=80, name='grabber', max_position=-2000)
-grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
+# grabber_motor.stop_action = remote_motor.MediumMotor.STOP_ACTION_COAST
 
 
 # contains only calibrated motors for now
@@ -222,16 +222,19 @@ def calibrate_motors():
     waist_motor.to_position(50)
     shoulder_motors.to_position(88)
     elbow_motor.to_position(0)
-    pitch_motor.to_position(95)
-    grabber_motor.to_position(30)
+    pitch_motor.to_position(98)
+    # grabber_motor.to_position(30)
     spin_motor.calibrate(timeout=5000, to_center=False)
 
     logger.debug(spin_motor)
-    spin_motor.to_position(25)
+    spin_motor.to_position(75)
     waist_motor.to_position(50)
     shoulder_motors.to_position(40)
     elbow_motor.to_position(20)
     pitch_motor.to_position(50)
+    
+    # grabber_motor.calibrate(timeout=7000, to_center=False)
+    # logger.debug(grabber_motor)
     grabber_motor.to_position(20)
 
     wait_for_motors(4)
@@ -316,7 +319,6 @@ def moves_from_file(command_file, wait_between_steps=True):
     with open(command_file, newline='', encoding='utf-8') as csv_file:
         csv_reader = csv.DictReader(csv_file)
         for row in csv_reader:
-
             execute_move(row)
 
             # sleep time between rows
@@ -350,13 +352,13 @@ if __name__ == "__main__":
 
     try:
         calibrate_motors()
-    except CalibrationError:
-        logger.error('Calibration error :(')
+    except CalibrationError as e:
+        logger.error('Calibration error: {}'.format(e))
         clean_shutdown()
         raise
 
-    # for cmd_file in ['pickup.csv']:  # ['commands.csv']:  # , 'waist.csv']:
-    #     moves_from_file(cmd_file, wait_between_steps=False)
+    for cmd_file in ['pickup.csv']:  # , 'commands.csv']:  # , 'waist.csv']:
+        moves_from_file(cmd_file, wait_between_steps=False)
 
     moves_from_userinput()
 
