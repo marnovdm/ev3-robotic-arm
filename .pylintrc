@@ -73,7 +73,9 @@ disable=too-few-public-methods,
         no-else-continue,  # very lame
         missing-module-docstring,  # @TODO: not required for now
         missing-class-docstring,  # @TODO: not required for now
+        missing-function-docstring,  # @TODO: not required at home lol
         broad-except,  # caught by flake8
+        consider-using-f-string,  # nope
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

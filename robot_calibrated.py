@@ -37,12 +37,11 @@ from ev3dev2.power import PowerSupply
 from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import ColorSensor, TouchSensor
 
-from smart_motor import (CalibrationError, ColorSensorMotor, LimitedRangeMotor, StaticRangeMotor,
+from smart_motor import (CalibrationError, ColorSensorMotor, LimitedRangeMotor,
                          TouchSensorMotor, TouchSensorMotorSet, MotorMoveError)
 
 # Config
 REMOTE_HOST = '10.42.0.3'
-JOYSTICK_DEADZONE = 20
 
 # Define speeds
 FULL_SPEED = 100
@@ -160,7 +159,7 @@ motors = {
     'elbow': elbow_motor,
     'roll': roll_motor,
     'pitch': pitch_motor,
-    # 'spin': spin_motor,
+    'spin': spin_motor,
     'grab': grabber_motor,
 }
 
@@ -226,8 +225,14 @@ def calibrate_motors():
     pitch_motor.to_position(95)
     grabber_motor.to_position(30)
     spin_motor.calibrate(timeout=5000, to_center=False)
+    
     logger.debug(spin_motor)
     spin_motor.to_position(25)
+    waist_motor.to_position(50)
+    shoulder_motors.to_position(40)
+    elbow_motor.to_position(20)
+    pitch_motor.to_position(50)
+    grabber_motor.to_position(20)
 
     wait_for_motors(4)
     set_led_colors("GREEN")
@@ -242,7 +247,7 @@ def log_power_info():
     logger.info('Remote battery power: {}V / {}A'.format(round(remote_power.measured_volts, 2), round(remote_power.measured_amps, 2)))
 
 
-def clean_shutdown(signal_received=None, frame=None):
+def clean_shutdown(signal_received=None, frame=None):  # pylint: disable=unused-argument
     """ make sure all motors are stopped when stopping this script """
     logger.info('Shutting down...')
     set_led_colors("RED")
@@ -304,6 +309,7 @@ def execute_move(moves, motor_wait_time=5):
             motors[motor].to_position(int(position), wait=False)
     
     wait_for_motors(motor_wait_time)
+
 
 def moves_from_file(command_file, wait_between_steps=True):
     logger.info('Reading moves from {}...'.format(command_file))

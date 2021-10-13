@@ -29,7 +29,7 @@ class SmartMotorBase:
         self._debug = debug
 
     def calibrate(self, to_center=True, timeout=5000):
-        logger.info('Calibrating {}...'.format(self._name))
+        logger.info('Calibrating {}... (to_center: {}, timeout: {})'.format(self._name, to_center, timeout))
 
     @property
     def max_position(self):
